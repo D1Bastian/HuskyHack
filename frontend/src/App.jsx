@@ -529,7 +529,6 @@ function ArtStoryExperience() {
                 {isAnalyzing && <div className="artwork-loading-overlay"><div className="artwork-spinner" /></div>}
               </div>
               <div className="artwork-meta">
-                <p className="eyebrow">{artworkMode === 'famous' ? 'Famous Artwork' : 'Personal Creation'}</p>
                 {isAnalyzing ? (
                   <div className="skeleton-block" style={{marginBottom: '12px'}}>
                     <span style={{width: '70%', height: '22px'}} />
@@ -595,10 +594,6 @@ function ArtStoryExperience() {
               <article>
                 <h2>Narration Script</h2>
                 {isAnalyzing ? <div className="skeleton-block"><span /><span /><span style={{width:'55%'}} /></div> : <p>{analysis.videoScript || 'A voiceover-ready script will appear here after analysis.'}</p>}
-              </article>
-              <article>
-                <h2>Runway Prompt</h2>
-                {isAnalyzing ? <div className="skeleton-block"><span /><span style={{width:'65%'}} /></div> : <p>{analysis.runwayPrompt || 'The cinematic prompt for text-to-video generation will appear here.'}</p>}
               </article>
 
               <div className="generate-panel">

@@ -503,12 +503,12 @@ button:disabled {
   margin: 0 0 12px;
   font-family: var(--display);
   font-size: 1.8rem;
-  font-weight: 400;
+  font-weight: 500;
 }
 
 .analysis-results p {
   margin: 0;
-  color: #262a33;
+  color: var(--muted);
   line-height: 1.78;
   white-space: pre-wrap;
 }
