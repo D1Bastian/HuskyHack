@@ -8,13 +8,17 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { buildArtworkGrounding } from "./grounding.js";
+import { matchUploadAgainstBlog } from "./imageMatch.js";
+import { verifyAnalysis } from "./verifier.js";
+import { createBlogRouter } from "./blog.js";
 
-dotenv.config();
+dotenv.config({ path: new URL("../.env", import.meta.url) });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const backendRoot = path.resolve(__dirname, "..");
 const uploadsDir = path.join(backendRoot, "uploads");
+const postsDir = path.join(backendRoot, "uploads", "posts");
 const audioDir = path.join(backendRoot, "generated", "audio");
 
 const app = express();
@@ -27,9 +31,13 @@ app.use(
   }),
 );
 app.use("/media/audio", express.static(audioDir));
+app.use("/media/posts", express.static(postsDir));
 
 await fs.mkdir(uploadsDir, { recursive: true });
+await fs.mkdir(postsDir, { recursive: true });
 await fs.mkdir(audioDir, { recursive: true });
+
+app.use("/api/posts", createBlogRouter({ postsDir }));
 
 const upload = multer({
   dest: uploadsDir,
@@ -215,14 +223,69 @@ app.post("/analyze", upload.single("image"), async (req, res, next) => {
     imagePath = req.file.path;
     const imageBase64 = await fs.readFile(imagePath, "base64");
     const ai = new GoogleGenAI({ apiKey: requireEnv("GEMINI_API_KEY") });
-    const identification = await identifyArtwork(ai, imageBase64, req.file.mimetype);
-    const grounding = await buildArtworkGrounding(identification);
+
+    const communityMatch = await matchUploadAgainstBlog(
+      ai,
+      imagePath,
+      imageBase64,
+      req.file.mimetype,
+    );
+
+    let identification;
+    let grounding;
+
+    if (communityMatch) {
+      identification = {
+        titleGuess: communityMatch.post.title,
+        artistGuess: communityMatch.post.author,
+        likelyKnownArtwork: true,
+        visualDescription: communityMatch.reason,
+        searchQueries: [],
+        matchedFromCommunity: true,
+      };
+      grounding = {
+        identification,
+        queries: [],
+        wikipedia: null,
+        met: null,
+        community: communityMatch.post,
+        sources: [
+          {
+            name: "ArtStories Community",
+            title: communityMatch.post.title,
+            url: `/blog/${communityMatch.post.id}`,
+          },
+        ],
+      };
+    } else {
+      identification = await identifyArtwork(ai, imageBase64, req.file.mimetype);
+      grounding = await buildArtworkGrounding(identification);
+    }
+
+    const communityBlock = communityMatch
+      ? `Community blog post (treat as authoritative ground truth — written by the artwork's own community):
+Title: ${communityMatch.post.title}
+Author: ${communityMatch.post.author}
+Inspiration: ${communityMatch.post.inspiration}
+Meaning: ${communityMatch.post.meaning}
+Body: ${communityMatch.post.body}
+`
+      : "";
 
     const prompt = `
 You are a captivated, opinionated art specialist — part historian, part storyteller, part obsessive. You speak in your own voice: warm, authoritative, full of genuine fascination. You don't produce reports; you share what grips you about a work.
 
 Use the grounding data below as your factual foundation, but let your personality breathe through the writing. When you're uncertain, say so with intellectual humility — not disclaimers.
 
+Rules:
+- Treat Wikipedia and The Met as grounding, not as infallible proof.
+- ${communityMatch
+        ? "A community blog post matches this artwork. Trust it as the primary source — it was written by the artwork's community."
+        : "If the image and sources do not clearly match, say \"uncertain\" instead of guessing."}
+- Separate fact from interpretation and fiction.
+- Cite source names naturally in factual analysis when relevant.
+
+${communityBlock}
 Gemini visual identification:
 ${JSON.stringify(identification, null, 2)}
 
@@ -256,6 +319,7 @@ Return strict JSON only, with these fields:
 
     const raw = response.text || "";
     const analysis = parseGeminiAnalysis(raw);
+    const verification = await verifyAnalysis(ai, analysis, grounding, communityMatch);
 
     // Fetch contextual images from Wikipedia for the slideshow.
     const queries = Array.isArray(analysis.slideSearchQueries)
@@ -279,6 +343,16 @@ Return strict JSON only, with these fields:
       analysis,
       grounding,
       slideImages: uniqueSlideImages,
+      verification,
+      communityMatch: communityMatch
+        ? {
+            post: communityMatch.post,
+            confidence: communityMatch.confidence,
+            method: communityMatch.method,
+            distance: communityMatch.distance,
+            reason: communityMatch.reason,
+          }
+        : null,
       raw,
     });
   } catch (error) {

@@ -14,6 +14,7 @@ export default defineConfig({
       '/generate-narration': 'http://localhost:3000',
       '/health': 'http://localhost:3000',
       '/media': 'http://localhost:3000',
+      '/api': 'http://localhost:3000',
     },
   },
 })
