@@ -26,15 +26,22 @@ db.exec(`
     image_path TEXT NOT NULL,
     image_filename TEXT NOT NULL,
     phash TEXT NOT NULL,
+    tile_phashes TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_posts_phash ON posts(phash);
 `);
 
+try {
+  db.exec(`ALTER TABLE posts ADD COLUMN tile_phashes TEXT NOT NULL DEFAULT '[]'`);
+} catch {
+  // column already exists
+}
+
 const insertStmt = db.prepare(`
-  INSERT INTO posts (title, author, inspiration, meaning, body, image_path, image_filename, phash)
-  VALUES (@title, @author, @inspiration, @meaning, @body, @image_path, @image_filename, @phash)
+  INSERT INTO posts (title, author, inspiration, meaning, body, image_path, image_filename, phash, tile_phashes)
+  VALUES (@title, @author, @inspiration, @meaning, @body, @image_path, @image_filename, @phash, @tile_phashes)
 `);
 
 const listStmt = db.prepare(`
@@ -48,7 +55,7 @@ const getStmt = db.prepare(`
 `);
 
 const allPhashStmt = db.prepare(`
-  SELECT id, title, author, inspiration, meaning, body, image_path, image_filename, phash
+  SELECT id, title, author, inspiration, meaning, body, image_path, image_filename, phash, tile_phashes
   FROM posts
 `);
 
