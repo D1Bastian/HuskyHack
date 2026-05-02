@@ -1,0 +1,2 @@
+# HuskyHackArtStories
+HuskyHack project
