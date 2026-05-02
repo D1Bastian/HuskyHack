@@ -750,7 +750,7 @@ button:disabled {
 .blog-page {
   width: min(1100px, calc(100% - 48px));
   margin: 0 auto;
-  padding: 132px 0 64px;
+  padding: 180px 0 64px;
 }
 
 .blog-shell {
@@ -846,13 +846,13 @@ button:disabled {
 
 .form-image-stage {
   display: grid;
-  gap: 14px;
+  gap: 28px;
 }
 
 .form-image-stage img,
 .form-image-stage .placeholder {
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 1;
   border: 1px dashed #c8cdd6;
   border-radius: var(--radius);
   background: #fafafa;

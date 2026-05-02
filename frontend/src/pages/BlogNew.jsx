@@ -51,7 +51,7 @@ export default function BlogNew() {
   return (
     <>
       <section className="page-heading">
-        <h1>Share an artwork</h1>
+        <h1>Share Artwork</h1>
         <p>Tell the story behind your piece. AI will recall it next time someone uploads the image.</p>
       </section>
 
