@@ -3,7 +3,7 @@ import { Link, NavLink, Route, Routes } from 'react-router-dom'
 import backgroundVideo from './assets/Art_Background.mp4'
 import './App.css'
 import VerificationBadge from './components/VerificationBadge.jsx'
-import { analyzeImage, generateMedia, listPosts } from './lib/api.js'
+import { analyzeImage, generateNarration, listPosts, resolveBackendUrl } from './lib/api.js'
 import BlogList from './pages/BlogList.jsx'
 import BlogNew from './pages/BlogNew.jsx'
 import BlogPost from './pages/BlogPost.jsx'
@@ -604,7 +604,7 @@ function ArtStoryExperience() {
                 {(audioUrl || videoUrl) && (
                   <div className="media-results">
                     {audioUrl && (
-                      <audio controls src={audioUrl}>
+                      <audio controls src={resolveBackendUrl(audioUrl)}>
                         <track kind="captions" />
                       </audio>
                     )}
@@ -644,7 +644,7 @@ function ArtStoryExperience() {
               {blogPosts.map((post) => (
                 <Link key={post.id} to={`/blog/${post.id}`} className="post-card">
                   <div className="post-thumb">
-                    <img src={post.image_url} alt={post.title} />
+                    <img src={resolveBackendUrl(post.image_url)} alt={post.title} />
                   </div>
                   <div className="post-meta">
                     <h3>{post.title}</h3>

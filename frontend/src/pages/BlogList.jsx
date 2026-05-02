@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { listPosts } from '../lib/api.js'
+import { listPosts, resolveBackendUrl } from '../lib/api.js'
 
 export default function BlogList() {
   const [posts, setPosts] = useState([])
@@ -35,7 +35,7 @@ export default function BlogList() {
         {posts.map((post) => (
           <Link key={post.id} to={`/blog/${post.id}`} className="post-card">
             <div className="post-thumb">
-              <img src={post.image_url} alt={post.title} />
+              <img src={resolveBackendUrl(post.image_url)} alt={post.title} />
             </div>
             <div className="post-meta">
               <h3>{post.title}</h3>
