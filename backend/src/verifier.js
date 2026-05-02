@@ -1,5 +1,9 @@
-const stripJsonFences = (text) =>
-  text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+const stripJsonFences = (text) => {
+  const s = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const start = s.indexOf("{");
+  const end = s.lastIndexOf("}");
+  return start !== -1 && end > start ? s.slice(start, end + 1) : s;
+};
 
 function buildSourceText(grounding, communityMatch) {
   const parts = [];
@@ -44,8 +48,8 @@ export async function verifyAnalysis(ai, analysis, grounding, communityMatch) {
 
   if (!sourceText.trim()) {
     return {
-      artHistory: { status: "unverified", note: "No grounding sources were found." },
-      meaning: { status: "unverified", note: "No grounding sources were found." },
+      artHistory: { status: "no-sources", note: "No matching sources were found for this artwork." },
+      meaning: { status: "no-sources", note: "No matching sources were found for this artwork." },
     };
   }
 
