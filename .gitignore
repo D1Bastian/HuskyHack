@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.vite
 *.local
 .env
 .env.*
@@ -27,3 +28,4 @@ generated
 *.njsproj
 *.sln
 *.sw?
+
