@@ -60,11 +60,22 @@ export default function BlogNew() {
       <form className="blog-form" onSubmit={submit}>
         <div className="form-grid">
           <div className="form-image-stage">
-            {previewUrl ? <img src={previewUrl} alt="Preview" /> : <div className="placeholder">Choose an image</div>}
-            <label className="file-picker form-file-picker">
-              <span>{file ? '↺ Change image' : '⬆ Upload image'}</span>
-              <input type="file" accept="image/*" onChange={handleFile} />
-            </label>
+            {previewUrl ? (
+              <div className="placeholder">
+                <img src={previewUrl} alt="Preview" />
+                <label className="file-picker form-file-picker overlay-picker">
+                  <span>↺ Change image</span>
+                  <input type="file" accept="image/*" onChange={handleFile} />
+                </label>
+              </div>
+            ) : (
+              <div className="placeholder">
+                <label className="file-picker form-file-picker">
+                  <span>⬆ Upload image</span>
+                  <input type="file" accept="image/*" onChange={handleFile} />
+                </label>
+              </div>
+            )}
           </div>
 
           <div className="form-fields">

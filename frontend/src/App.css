@@ -846,24 +846,34 @@ button:disabled {
 
 .form-image-stage {
   display: grid;
-  gap: 28px;
+  margin-bottom: 24px;
 }
 
-.form-image-stage img,
 .form-image-stage .placeholder {
+  position: relative;
   width: 100%;
   aspect-ratio: 3 / 1;
   border: 1px dashed #c8cdd6;
   border-radius: var(--radius);
   background: #fafafa;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.form-image-stage .placeholder img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .file-picker,
 .full-button {
-  min-height: 42px;
+  min-height: 48px;
+  padding: 0 24px;
   border-radius: var(--radius);
   cursor: pointer;
   display: inline-flex;
