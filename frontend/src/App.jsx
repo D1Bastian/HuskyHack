@@ -7,6 +7,7 @@ const emptyAnalysis = {
   lore: '',
   videoScript: '',
   runwayPrompt: '',
+  groundingSummary: '',
 }
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
   const [analysis, setAnalysis] = useState(emptyAnalysis)
   const [audioUrl, setAudioUrl] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
+  const [sources, setSources] = useState([])
   const [status, setStatus] = useState('Choose an artwork image to begin.')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -30,6 +32,7 @@ function App() {
     setAnalysis(emptyAnalysis)
     setAudioUrl('')
     setVideoUrl('')
+    setSources([])
 
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl)
@@ -51,7 +54,7 @@ function App() {
     }
 
     setIsAnalyzing(true)
-    setStatus('Analyzing the artwork with Gemini...')
+    setStatus('Analyzing artwork… grounding with Wikipedia & The Met…')
 
     try {
       const formData = new FormData()
@@ -68,7 +71,8 @@ function App() {
       }
 
       setAnalysis({ ...emptyAnalysis, ...data.analysis })
-      setStatus('Analysis ready.')
+      setSources(data.grounding?.sources || [])
+      setStatus('Analysis ready. Generate a video below.')
     } catch (error) {
       setStatus(error.message)
     } finally {
@@ -83,14 +87,12 @@ function App() {
     }
 
     setIsGenerating(true)
-    setStatus('Generating voice and video. This can take a few minutes...')
+    setStatus('Generating voice and video — this takes a minute or two…')
 
     try {
       const response = await fetch('/generate-video', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           script: analysis.videoScript,
           runwayPrompt: analysis.runwayPrompt,
@@ -104,7 +106,7 @@ function App() {
 
       setAudioUrl(data.audio?.url || '')
       setVideoUrl(data.videoUrl || '')
-      setStatus(data.videoUrl ? 'Video generated.' : 'Runway finished without a video URL.')
+      setStatus(data.videoUrl ? 'Video generated!' : 'Runway finished — no video URL returned.')
     } catch (error) {
       setStatus(error.message)
     } finally {
@@ -113,72 +115,124 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <section className="workbench">
-        <div className="upload-panel">
-          <div className="image-stage">
-            {previewUrl ? (
-              <img src={previewUrl} alt="Selected artwork preview" />
-            ) : (
-              <div className="placeholder">Artwork preview</div>
-            )}
-          </div>
+    <div className="app-shell">
+      <header className="app-header">
+        <div className="logo-mark" aria-hidden="true">🎨</div>
+        <span className="brand">ArtStories</span>
+        <span className="tagline">HuskyHack · Gemini × Wikipedia × The Met × ElevenLabs × Runway</span>
+      </header>
 
-          <div className="controls">
-            <label className="file-picker">
-              <span>Upload image</span>
-              <input type="file" accept="image/*" onChange={handleFileChange} />
-            </label>
-            <button type="button" onClick={analyzeArtwork} disabled={!file || isAnalyzing}>
-              {isAnalyzing ? 'Analyzing' : 'Analyze'}
-            </button>
-            <button type="button" onClick={generateVideo} disabled={!canGenerate}>
-              {isGenerating ? 'Generating' : 'Generate video'}
-            </button>
-          </div>
-
-          <p className="status">{status}</p>
-        </div>
-
-        <div className="results-panel">
-          <h1>ArtStories</h1>
-
-          <div className="result-grid">
-            <article>
-              <h2>Art History</h2>
-              <p>{analysis.artHistory || 'Factual analysis will appear here.'}</p>
-            </article>
-            <article>
-              <h2>Meaning</h2>
-              <p>{analysis.meaning || 'Interpretation will appear here.'}</p>
-            </article>
-            <article>
-              <h2>Lore</h2>
-              <p>{analysis.lore || 'Fictional lore will appear here.'}</p>
-            </article>
-            <article>
-              <h2>Video Script</h2>
-              <p>{analysis.videoScript || 'The narration script will appear here.'}</p>
-            </article>
-          </div>
-
-          {(audioUrl || videoUrl) && (
-            <div className="media-results">
-              {audioUrl && (
-                <audio controls src={audioUrl}>
-                  <track kind="captions" />
-                </audio>
-              )}
-              {videoUrl && (
-                <a href={videoUrl} target="_blank" rel="noreferrer">
-                  Open generated video
-                </a>
+      <main>
+        <section className={`workbench${isAnalyzing ? ' analyzing' : ''}`}>
+          {/* ── Upload Panel ── */}
+          <div className="upload-panel">
+            <div className="image-stage">
+              {previewUrl ? (
+                <img src={previewUrl} alt="Selected artwork preview" />
+              ) : (
+                <div className="placeholder">Drop artwork here</div>
               )}
             </div>
-          )}
-        </div>
-      </section>
-    </main>
+
+            <div className="controls">
+              <label className="file-picker" htmlFor="artwork-upload">
+                <span>{file ? '↺ Change image' : '⬆ Upload image'}</span>
+                <input
+                  id="artwork-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                />
+              </label>
+
+              <button
+                type="button"
+                id="analyze-btn"
+                onClick={analyzeArtwork}
+                disabled={!file || isAnalyzing}
+              >
+                {isAnalyzing ? '⟳ Analyzing…' : '✦ Analyze'}
+              </button>
+
+              <button
+                type="button"
+                id="generate-btn"
+                onClick={generateVideo}
+                disabled={!canGenerate}
+              >
+                {isGenerating ? '⟳ Generating…' : '▶ Generate video'}
+              </button>
+            </div>
+
+            <p className="status" role="status">{status}</p>
+          </div>
+
+          {/* ── Results Panel ── */}
+          <div className="results-panel">
+            <div className="panel-header">
+              <h1>ArtStories</h1>
+              <p className="panel-subtitle">AI-grounded art history · lore · narration · video</p>
+            </div>
+
+            <div className="result-grid">
+              <article>
+                <h2>Art History</h2>
+                <p>{analysis.artHistory || 'Factual analysis will appear here once you analyze an image.'}</p>
+              </article>
+
+              <article>
+                <h2>Meaning</h2>
+                <p>{analysis.meaning || 'Symbolic interpretation will appear here.'}</p>
+              </article>
+
+              <article>
+                <h2>Lore</h2>
+                <p>{analysis.lore || 'Fictional myth or story will appear here.'}</p>
+              </article>
+
+              <article>
+                <h2>Video Script</h2>
+                <p>{analysis.videoScript || 'The 30-second narration script will appear here.'}</p>
+              </article>
+
+              <article>
+                <h2>Grounding</h2>
+                <p>{analysis.groundingSummary || 'Wikipedia and Met Museum source matches will appear here.'}</p>
+                {sources.length > 0 && (
+                  <div className="source-list">
+                    {sources.map((source) => (
+                      <a
+                        key={`${source.name}-${source.title}`}
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {source.name}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </article>
+            </div>
+
+            {(audioUrl || videoUrl) && (
+              <div className="media-results">
+                {audioUrl && (
+                  <audio controls src={audioUrl}>
+                    <track kind="captions" />
+                  </audio>
+                )}
+                {videoUrl && (
+                  <a href={videoUrl} target="_blank" rel="noreferrer">
+                    Open generated video
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
+    </div>
   )
 }
 

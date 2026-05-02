@@ -8,6 +8,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import RunwayML, { APIError, TaskFailedError, TaskTimedOutError } from "@runwayml/sdk";
+import { buildArtworkGrounding } from "./grounding.js";
 
 dotenv.config();
 
@@ -78,6 +79,14 @@ const parseGeminiAnalysis = (text) => {
   }
 };
 
+const parseGeminiJson = (text, fallback = {}) => {
+  try {
+    return JSON.parse(stripJsonFences(text || ""));
+  } catch {
+    return fallback;
+  }
+};
+
 const trimForRunway = (text) => text.trim().slice(0, 1000);
 
 const parseProviderMessage = (data) => {
@@ -112,6 +121,44 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+async function identifyArtwork(ai, imageBase64, mimeType) {
+  const response = await ai.models.generateContent({
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    contents: [
+      {
+        inlineData: {
+          mimeType,
+          data: imageBase64,
+        },
+      },
+      {
+        text: `
+Identify the uploaded artwork for source lookup.
+
+If you are not sure of the exact artwork, say "uncertain" in titleGuess and provide visual search queries instead.
+
+Return strict JSON only:
+{
+  "titleGuess": "known artwork title or uncertain",
+  "artistGuess": "artist name or uncertain",
+  "likelyKnownArtwork": true,
+  "visualDescription": "one concise sentence",
+  "searchQueries": ["best lookup query", "alternate lookup query"]
+}
+`,
+      },
+    ],
+  });
+
+  return parseGeminiJson(response.text, {
+    titleGuess: "uncertain",
+    artistGuess: "uncertain",
+    likelyKnownArtwork: false,
+    visualDescription: "uncertain",
+    searchQueries: [],
+  });
+}
+
 app.post("/analyze", upload.single("image"), async (req, res, next) => {
   let imagePath;
 
@@ -124,11 +171,25 @@ app.post("/analyze", upload.single("image"), async (req, res, next) => {
     imagePath = req.file.path;
     const imageBase64 = await fs.readFile(imagePath, "base64");
     const ai = new GoogleGenAI({ apiKey: requireEnv("GEMINI_API_KEY") });
+    const identification = await identifyArtwork(ai, imageBase64, req.file.mimetype);
+    const grounding = await buildArtworkGrounding(identification);
 
     const prompt = `
 You are an elite art historian, cultural analyst, and mythological storyteller.
 
-Analyze the uploaded artwork. If the exact artwork, artist, period, or provenance is uncertain, say "uncertain" instead of guessing.
+Analyze the uploaded artwork using the source grounding below.
+
+Rules:
+- Treat Wikipedia and The Met as grounding, not as infallible proof.
+- If the image and sources do not clearly match, say "uncertain" instead of guessing.
+- Separate fact from interpretation and fiction.
+- Cite source names naturally in factual analysis when relevant.
+
+Gemini visual identification:
+${JSON.stringify(identification, null, 2)}
+
+Grounding from public APIs:
+${JSON.stringify(grounding, null, 2)}
 
 Return strict JSON only, with these string fields:
 {
@@ -136,7 +197,8 @@ Return strict JSON only, with these string fields:
   "meaning": "[INTERPRETATION] Symbolism, mood, composition, cultural meaning, and plausible readings.",
   "lore": "[LORE - FICTIONAL] A clearly fictional myth or story inspired by the image.",
   "videoScript": "[VIDEO SCRIPT] A 30 second cinematic narration in one voiceover-ready paragraph.",
-  "runwayPrompt": "A visual text-to-video prompt under 1000 characters describing what should appear on screen."
+  "runwayPrompt": "A visual text-to-video prompt under 1000 characters describing what should appear on screen.",
+  "groundingSummary": "One short sentence explaining which sources were found and how confident the match is."
 }
 `;
 
@@ -159,6 +221,7 @@ Return strict JSON only, with these string fields:
     res.json({
       success: true,
       analysis,
+      grounding,
       raw,
     });
   } catch (error) {

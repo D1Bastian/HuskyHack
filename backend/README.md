@@ -1,40 +1,42 @@
-# HuskyHack ArtStories Backend
+# ArtStories Backend
 
-Express API for turning an uploaded artwork image into structured art analysis, narration, ElevenLabs audio, and a Runway video generation task.
+Express backend for the ArtStories hackathon prototype.
+
+## Pipeline
+
+1. `/analyze` receives an uploaded artwork image.
+2. Gemini performs a lightweight visual identification pass.
+3. `src/grounding.js` searches Wikipedia and The Metropolitan Museum of Art public collection API.
+4. Gemini receives the image plus grounding context and returns structured JSON:
+   - `artHistory`
+   - `meaning`
+   - `lore`
+   - `videoScript`
+   - `runwayPrompt`
+   - `groundingSummary`
+5. `/generate-video` sends the script to ElevenLabs and the prompt to Runway.
 
 ## Setup
 
-1. Install dependencies:
+```sh
+npm install
+cp .env.example .env
+npm run dev
+```
 
-   ```sh
-   npm install
-   ```
+Required keys:
 
-2. Create your local environment file:
+- `GEMINI_API_KEY`
+- `ELEVENLABS_API_KEY`
+- `RUNWAY_API_KEY`
 
-   ```sh
-   cp .env.example .env
-   ```
-
-3. Fill in `.env` with:
-
-   - `GEMINI_API_KEY` from Google AI Studio
-   - `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` from ElevenLabs
-   - `RUNWAY_API_KEY` from the Runway developer portal
-
-4. Start the backend:
-
-   ```sh
-   npm run dev
-   ```
-
-The server runs on `http://localhost:3000` by default.
+Wikipedia and Met are public APIs and do not need keys.
 
 ## Endpoints
 
 ### `GET /health`
 
-Returns a simple health check.
+Returns `{ "ok": true }`.
 
 ### `POST /analyze`
 
@@ -50,9 +52,16 @@ Returns:
     "meaning": "...",
     "lore": "...",
     "videoScript": "...",
-    "runwayPrompt": "..."
+    "runwayPrompt": "...",
+    "groundingSummary": "..."
   },
-  "raw": "..."
+  "grounding": {
+    "identification": {},
+    "queries": [],
+    "wikipedia": {},
+    "met": {},
+    "sources": []
+  }
 }
 ```
 
@@ -63,8 +72,8 @@ JSON body:
 ```json
 {
   "script": "Narration script from /analyze",
-  "runwayPrompt": "Optional visual prompt for Runway"
+  "runwayPrompt": "Visual prompt from /analyze"
 }
 ```
 
-Returns local audio metadata plus Runway task output. Runway output URLs are temporary, so download/store them in production.
+Returns ElevenLabs audio metadata and Runway task/video data. If Runway has no credits, the API returns a clean provider error.
