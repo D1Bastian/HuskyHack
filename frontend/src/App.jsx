@@ -601,10 +601,6 @@ function ArtStoryExperience() {
 
           <section className="blog-shell gallery-blog-section">
             <div className="blog-header">
-              <div>
-                <h2>Community Blog</h2>
-                <p className="panel-subtitle">Artworks shared and explained by their creators.</p>
-              </div>
               <Link to="/blog/new" className="primary-link">+ New post</Link>
             </div>
 
@@ -798,8 +794,15 @@ function BlogFrame({ children }) {
           <NavLink to="/" end>
             Analyze
           </NavLink>
-          <NavLink to="/blog">Blog</NavLink>
-          <NavLink to="/blog/new">New Post</NavLink>
+          <NavLink to="/" end>
+            My Creations
+          </NavLink>
+          <NavLink to="/" end>
+            Gallery
+          </NavLink>
+          <NavLink to="/" end>
+            FAQ
+          </NavLink>
         </nav>
       </header>
 

@@ -49,13 +49,13 @@ export default function BlogNew() {
   }
 
   return (
-    <section className="blog-shell">
-      <div className="blog-header">
-        <div>
-          <h1>Share an artwork</h1>
-          <p className="panel-subtitle">Tell the story behind your piece. AI will recall it next time someone uploads the image.</p>
-        </div>
-      </div>
+    <>
+      <section className="page-heading">
+        <h1>Share an artwork</h1>
+        <p>Tell the story behind your piece. AI will recall it next time someone uploads the image.</p>
+      </section>
+
+      <section className="blog-shell">
 
       <form className="blog-form" onSubmit={submit}>
         <div className="form-grid">
@@ -97,6 +97,7 @@ export default function BlogNew() {
           </div>
         </div>
       </form>
-    </section>
+      </section>
+    </>
   )
 }
