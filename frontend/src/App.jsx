@@ -517,11 +517,6 @@ function ArtStoryExperience() {
 
       {view === 'analysis' && (
         <main className="analysis-page">
-          <button type="button" className="back-button" onClick={() => setView('home')}>
-            <Icon name="back" />
-            Analyze Another Artwork
-          </button>
-
           <section className="analysis-layout">
             <aside className="artwork-panel">
               <div className={`artwork-image-wrap${isAnalyzing ? ' artwork-loading' : ''}`}>
@@ -556,6 +551,10 @@ function ArtStoryExperience() {
                     ))}
                   </div>
                 )}
+                <button type="button" className="analyze-another-btn" onClick={() => setView('home')}>
+                  <Icon name="back" />
+                  Analyze Another Artwork
+                </button>
               </div>
             </aside>
 
@@ -591,16 +590,7 @@ function ArtStoryExperience() {
                 </div>
                 {isAnalyzing ? <div className="skeleton-block"><span /><span /><span style={{width:'80%'}} /></div> : <p>{analysis.lore || 'The fictional lore section will stay clearly labeled as fiction.'}</p>}
               </article>
-              <article>
-                <h2>Narration Script</h2>
-                {isAnalyzing ? <div className="skeleton-block"><span /><span /><span style={{width:'55%'}} /></div> : <p>{analysis.videoScript || 'A voiceover-ready script will appear here after analysis.'}</p>}
-              </article>
-
-              <div className="generate-panel">
-                <button type="button" onClick={generateVideo} disabled={!canGenerate}>
-                  <Icon name="video" />
-                  {isGenerating ? 'Generating...' : 'Generate Narrated Video'}
-                </button>
+              <article className="narration-card">
                 {(audioUrl || videoUrl) && (
                   <div className="media-results">
                     {audioUrl && (
@@ -615,7 +605,15 @@ function ArtStoryExperience() {
                     )}
                   </div>
                 )}
-              </div>
+                <div className="narration-card-head">
+                  <h2>Narration Script</h2>
+                  <button type="button" className="narration-generate-btn" onClick={generateVideo} disabled={!canGenerate}>
+                    <Icon name="video" />
+                    {isGenerating ? 'Generating...' : 'Generate Narrated Video'}
+                  </button>
+                </div>
+                {isAnalyzing ? <div className="skeleton-block"><span /><span /><span style={{width:'55%'}} /></div> : <p>{analysis.videoScript || 'A voiceover-ready script will appear here after analysis.'}</p>}
+              </article>
             </section>
           </section>
         </main>
