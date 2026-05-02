@@ -87,15 +87,26 @@ function App() {
     }
 
     setIsGenerating(true)
-    setStatus('Generating voice and video — this takes a minute or two…')
+    setStatus('Generating voice and video with Veo — this takes a minute or two…')
 
     try {
+      // Read the image as base64 so Veo can use it as the starting frame.
+      let imageBase64 = null
+      let imageMimeType = null
+      if (file) {
+        const buf = await file.arrayBuffer()
+        imageBase64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
+        imageMimeType = file.type
+      }
+
       const response = await fetch('/generate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           script: analysis.videoScript,
           runwayPrompt: analysis.runwayPrompt,
+          imageBase64,
+          imageMimeType,
         }),
       })
 
@@ -106,7 +117,7 @@ function App() {
 
       setAudioUrl(data.audio?.url || '')
       setVideoUrl(data.videoUrl || '')
-      setStatus(data.videoUrl ? 'Video generated!' : 'Runway finished — no video URL returned.')
+      setStatus(data.videoUrl ? 'Video generated!' : 'Veo finished — no video URL returned.')
     } catch (error) {
       setStatus(error.message)
     } finally {
@@ -176,23 +187,23 @@ function App() {
 
             <div className="result-grid">
               <article>
-                <h2>Art History</h2>
-                <p>{analysis.artHistory || 'Factual analysis will appear here once you analyze an image.'}</p>
+                <h2>History</h2>
+                <p>{analysis.artHistory || 'Upload a piece and the specialist will share its history.'}</p>
               </article>
 
               <article>
-                <h2>Meaning</h2>
-                <p>{analysis.meaning || 'Symbolic interpretation will appear here.'}</p>
+                <h2>What It Means</h2>
+                <p>{analysis.meaning || 'Interpretation and meaning will appear here.'}</p>
               </article>
 
               <article>
-                <h2>Lore</h2>
-                <p>{analysis.lore || 'Fictional myth or story will appear here.'}</p>
+                <h2>The Legend</h2>
+                <p>{analysis.lore || 'A myth or legend inspired by the work will appear here.'}</p>
               </article>
 
               <article>
-                <h2>Video Script</h2>
-                <p>{analysis.videoScript || 'The 30-second narration script will appear here.'}</p>
+                <h2>Narration Script</h2>
+                <p>{analysis.videoScript || 'The 30-second cinematic voiceover script will appear here.'}</p>
               </article>
 
               <article>
@@ -223,9 +234,12 @@ function App() {
                   </audio>
                 )}
                 {videoUrl && (
-                  <a href={videoUrl} target="_blank" rel="noreferrer">
-                    Open generated video
-                  </a>
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video
+                    controls
+                    src={videoUrl}
+                    style={{ maxWidth: '100%', borderRadius: '8px', marginTop: '8px' }}
+                  />
                 )}
               </div>
             )}

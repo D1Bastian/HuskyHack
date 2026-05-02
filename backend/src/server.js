@@ -7,7 +7,6 @@ import axios from "axios";
 import cors from "cors";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
-import RunwayML, { APIError, TaskFailedError, TaskTimedOutError } from "@runwayml/sdk";
 import { buildArtworkGrounding } from "./grounding.js";
 
 dotenv.config();
@@ -17,6 +16,7 @@ const __dirname = path.dirname(__filename);
 const backendRoot = path.resolve(__dirname, "..");
 const uploadsDir = path.join(backendRoot, "uploads");
 const audioDir = path.join(backendRoot, "generated", "audio");
+const videoDir = path.join(backendRoot, "generated", "video");
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -28,9 +28,11 @@ app.use(
   }),
 );
 app.use("/media/audio", express.static(audioDir));
+app.use("/media/video", express.static(videoDir));
 
 await fs.mkdir(uploadsDir, { recursive: true });
 await fs.mkdir(audioDir, { recursive: true });
+await fs.mkdir(videoDir, { recursive: true });
 
 const upload = multer({
   dest: uploadsDir,
@@ -175,15 +177,9 @@ app.post("/analyze", upload.single("image"), async (req, res, next) => {
     const grounding = await buildArtworkGrounding(identification);
 
     const prompt = `
-You are an elite art historian, cultural analyst, and mythological storyteller.
+You are a captivated, opinionated art specialist — part historian, part storyteller, part obsessive. You speak in your own voice: warm, authoritative, full of genuine fascination. You don't produce reports; you share what grips you about a work.
 
-Analyze the uploaded artwork using the source grounding below.
-
-Rules:
-- Treat Wikipedia and The Met as grounding, not as infallible proof.
-- If the image and sources do not clearly match, say "uncertain" instead of guessing.
-- Separate fact from interpretation and fiction.
-- Cite source names naturally in factual analysis when relevant.
+Use the grounding data below as your factual foundation, but let your personality breathe through the writing. When you're uncertain, say so with intellectual humility — not disclaimers.
 
 Gemini visual identification:
 ${JSON.stringify(identification, null, 2)}
@@ -193,12 +189,12 @@ ${JSON.stringify(grounding, null, 2)}
 
 Return strict JSON only, with these string fields:
 {
-  "artHistory": "[FACTUAL ANALYSIS] Accurate history, artist/school if known, period, visual evidence, and uncertainty notes.",
-  "meaning": "[INTERPRETATION] Symbolism, mood, composition, cultural meaning, and plausible readings.",
-  "lore": "[LORE - FICTIONAL] A clearly fictional myth or story inspired by the image.",
-  "videoScript": "[VIDEO SCRIPT] A 30 second cinematic narration in one voiceover-ready paragraph.",
-  "runwayPrompt": "A visual text-to-video prompt under 1000 characters describing what should appear on screen.",
-  "groundingSummary": "One short sentence explaining which sources were found and how confident the match is."
+  "artHistory": "Speak as an expert who loves this piece. Tell its history in your own words — who made it, when, why it matters, what the era felt like. Cite sources naturally if they helped. If uncertain, admit it with curiosity not caution.",
+  "meaning": "What does this work *do* to you? Interpret its symbolism, composition, mood, and cultural weight the way a specialist who has spent years with art would — with conviction and nuance.",
+  "lore": "Invent a vivid, clearly fictional myth or legend this artwork could have inspired. Make it feel ancient, poetic, and earned by the image itself.",
+  "videoScript": "Write a 30-second cinematic voiceover — one flowing paragraph — in the voice of this art specialist. Evocative, rhythmic, made to be spoken aloud over moving images.",
+  "runwayPrompt": "A visual text-to-video prompt under 1000 characters. Describe exactly what should appear on screen: camera movement, lighting, atmosphere, subject, style.",
+  "groundingSummary": "One honest sentence: which sources matched and how confident you are."
 }
 `;
 
@@ -279,81 +275,98 @@ async function generateVoice(script) {
   };
 }
 
-async function generateRunwayVideo(promptText) {
-  const runwayApiKey = process.env.RUNWAY_API_KEY || process.env.RUNWAYML_API_SECRET;
-  if (!runwayApiKey) {
-    const error = new Error("Missing required environment variable: RUNWAY_API_KEY");
-    error.status = 500;
-    throw error;
-  }
+async function generateVeoVideo(promptText, imageBase64, mimeType) {
+  const ai = new GoogleGenAI({ apiKey: requireEnv("GEMINI_API_KEY") });
+  const model = process.env.VEO_MODEL || "veo-2.0-generate-001";
 
-  const client = new RunwayML({ apiKey: runwayApiKey });
-  let task;
+  let operation;
   try {
-    const createdTask = await client.textToVideo.create({
-      model: process.env.RUNWAY_MODEL || "gen4.5",
-      promptText: trimForRunway(promptText),
-      ratio: process.env.RUNWAY_RATIO || "1280:720",
-      duration: Number(process.env.RUNWAY_DURATION || 5),
-    });
+    const params = {
+      model,
+      prompt: trimForRunway(promptText),
+      config: {
+        aspectRatio: process.env.VEO_ASPECT_RATIO || "16:9",
+        durationSeconds: Number(process.env.VEO_DURATION_SECONDS || 5),
+        numberOfVideos: 1,
+      },
+    };
 
-    task = await client.tasks
-      .retrieve(createdTask.id)
-      .waitForTaskOutput({
-        timeout: Number(process.env.RUNWAY_WAIT_TIMEOUT_MS || 600000),
-      });
-  } catch (error) {
-    if (error instanceof APIError) {
-      throw providerError(
-        "Runway",
-        error.status || 502,
-        parseProviderMessage(error.error) || error.message,
-        error.error,
-      );
+    // Use the uploaded artwork as the starting frame when available.
+    if (imageBase64 && mimeType) {
+      params.image = { imageBytes: imageBase64, mimeType };
     }
 
-    throw error;
+    operation = await ai.models.generateVideos(params);
+  } catch (error) {
+    throw providerError("Veo", error.status || 502, error.message, null);
   }
 
-  return task;
+  // Poll until done (Veo is a long-running operation).
+  const pollIntervalMs = 8000;
+  const timeoutMs = Number(process.env.VEO_WAIT_TIMEOUT_MS || 600000);
+  const deadline = Date.now() + timeoutMs;
+
+  while (!operation.done) {
+    if (Date.now() > deadline) {
+      throw providerError("Veo", 504, "Video generation timed out.", null);
+    }
+    await new Promise((r) => setTimeout(r, pollIntervalMs));
+    try {
+      operation = await ai.operations.getVideosOperation({ operation });
+    } catch (error) {
+      throw providerError("Veo", 502, `Polling failed: ${error.message}`, null);
+    }
+  }
+
+  const generatedVideo = operation.response?.generatedVideos?.[0]?.video;
+  if (!generatedVideo) {
+    throw providerError("Veo", 502, "Veo returned no video in its response.", null);
+  }
+
+  // Download the video bytes and save locally so the frontend can stream it.
+  const filename = `video_${Date.now()}.mp4`;
+  const filePath = path.join(videoDir, filename);
+
+  if (generatedVideo.videoBytes) {
+    // Bytes returned directly (base64 or Buffer).
+    const buf = Buffer.isBuffer(generatedVideo.videoBytes)
+      ? generatedVideo.videoBytes
+      : Buffer.from(generatedVideo.videoBytes, "base64");
+    await fs.writeFile(filePath, buf);
+  } else if (generatedVideo.uri) {
+    // Signed URI — fetch and save.
+    const dlRes = await axios.get(generatedVideo.uri, {
+      responseType: "arraybuffer",
+      headers: { "x-goog-api-key": process.env.GEMINI_API_KEY },
+    });
+    await fs.writeFile(filePath, Buffer.from(dlRes.data));
+  } else {
+    throw providerError("Veo", 502, "Veo video has neither bytes nor URI.", null);
+  }
+
+  return { filename, url: `/media/video/${filename}` };
 }
 
 app.post("/generate-video", async (req, res, next) => {
   try {
-    const { script, runwayPrompt } = req.body;
+    const { script, runwayPrompt, imageBase64, imageMimeType } = req.body;
 
     if (!script || typeof script !== "string") {
       res.status(400).json({ error: "Provide a non-empty script string." });
       return;
     }
 
-    const audio = await generateVoice(script);
-    const runwayTask = await generateRunwayVideo(runwayPrompt || script);
-    const videoUrl = Array.isArray(runwayTask.output) ? runwayTask.output[0] : null;
+    const [audio, video] = await Promise.all([
+      generateVoice(script),
+      generateVeoVideo(runwayPrompt || script, imageBase64 || null, imageMimeType || null),
+    ]);
 
     res.json({
       success: true,
       audio,
-      videoUrl,
-      runwayTask,
+      videoUrl: video.url,
     });
   } catch (error) {
-    if (error instanceof TaskFailedError) {
-      res.status(502).json({
-        error: "Runway video generation failed.",
-        runwayTask: error.taskDetails,
-      });
-      return;
-    }
-
-    if (error instanceof TaskTimedOutError) {
-      res.status(504).json({
-        error: "Runway video generation timed out.",
-        runwayTask: error.taskDetails,
-      });
-      return;
-    }
-
     next(error);
   }
 });
