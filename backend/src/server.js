@@ -16,7 +16,6 @@ const __dirname = path.dirname(__filename);
 const backendRoot = path.resolve(__dirname, "..");
 const uploadsDir = path.join(backendRoot, "uploads");
 const audioDir = path.join(backendRoot, "generated", "audio");
-const videoDir = path.join(backendRoot, "generated", "video");
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -28,11 +27,9 @@ app.use(
   }),
 );
 app.use("/media/audio", express.static(audioDir));
-app.use("/media/video", express.static(videoDir));
 
 await fs.mkdir(uploadsDir, { recursive: true });
 await fs.mkdir(audioDir, { recursive: true });
-await fs.mkdir(videoDir, { recursive: true });
 
 const upload = multer({
   dest: uploadsDir,
@@ -59,6 +56,51 @@ const requireEnv = (name) => {
 
   return value;
 };
+
+/**
+ * Fetch images from Wikipedia for an array of search queries.
+ * Uses the Wikipedia REST API page summary endpoint which returns thumbnails.
+ * Returns an array of image URLs (skips queries that don't yield an image).
+ */
+async function fetchWikipediaImages(queries) {
+  if (!Array.isArray(queries) || queries.length === 0) return [];
+
+  const results = await Promise.allSettled(
+    queries.map(async (query) => {
+      const encoded = encodeURIComponent(query.trim());
+
+      // First try direct page lookup.
+      const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encoded}`;
+      try {
+        const res = await axios.get(summaryUrl, { timeout: 5000 });
+        const img =
+          res.data?.originalimage?.source ||
+          res.data?.thumbnail?.source;
+        if (img) return img;
+      } catch {
+        // Page not found — fall through to search.
+      }
+
+      // Fallback: search Wikipedia and use the first result's image.
+      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encoded}&srlimit=1&format=json&origin=*`;
+      try {
+        const searchRes = await axios.get(searchUrl, { timeout: 5000 });
+        const title = searchRes.data?.query?.search?.[0]?.title;
+        if (!title) return null;
+
+        const fallbackUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+        const fbRes = await axios.get(fallbackUrl, { timeout: 5000 });
+        return fbRes.data?.originalimage?.source || fbRes.data?.thumbnail?.source || null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return results
+    .map((r) => (r.status === "fulfilled" ? r.value : null))
+    .filter(Boolean);
+}
 
 const stripJsonFences = (text) =>
   text
@@ -187,13 +229,14 @@ ${JSON.stringify(identification, null, 2)}
 Grounding from public APIs:
 ${JSON.stringify(grounding, null, 2)}
 
-Return strict JSON only, with these string fields:
+Return strict JSON only, with these fields:
 {
   "artHistory": "Speak as an expert who loves this piece. Tell its history in your own words — who made it, when, why it matters, what the era felt like. Cite sources naturally if they helped. If uncertain, admit it with curiosity not caution.",
   "meaning": "What does this work *do* to you? Interpret its symbolism, composition, mood, and cultural weight the way a specialist who has spent years with art would — with conviction and nuance.",
   "lore": "Invent a vivid, clearly fictional myth or legend this artwork could have inspired. Make it feel ancient, poetic, and earned by the image itself.",
-  "videoScript": "Write a 30-second cinematic voiceover — one flowing paragraph — in the voice of this art specialist. Evocative, rhythmic, made to be spoken aloud over moving images.",
-  "runwayPrompt": "A visual text-to-video prompt under 1000 characters. Describe exactly what should appear on screen: camera movement, lighting, atmosphere, subject, style.",
+  "videoScript": "Write a 30-second cinematic voiceover — one flowing paragraph — in the voice of this art specialist. Evocative, rhythmic, made to be spoken aloud while slides display.",
+  "slideCaptions": ["Array of exactly 4 short, evocative one-sentence captions for a documentary slideshow: (1) introduce the piece, (2) the artist or historical context, (3) the emotional/symbolic core, (4) closing poetic thought."],
+  "slideSearchQueries": ["Array of exactly 4 Wikipedia article titles to fetch images for the slideshow. (1) the artwork title itself, (2) the artist's name, (3) a relevant art movement, city, or historical era, (4) the museum or collection where the work is held. Use real Wikipedia article titles that are likely to have images."],
   "groundingSummary": "One honest sentence: which sources matched and how confident you are."
 }
 `;
@@ -214,10 +257,28 @@ Return strict JSON only, with these string fields:
     const raw = response.text || "";
     const analysis = parseGeminiAnalysis(raw);
 
+    // Fetch contextual images from Wikipedia for the slideshow.
+    const queries = Array.isArray(analysis.slideSearchQueries)
+      ? analysis.slideSearchQueries
+      : [];
+    const slideImages = await fetchWikipediaImages(queries);
+
+    // Also include grounding images as fallbacks.
+    if (grounding.wikipedia?.thumbnailUrl) {
+      slideImages.push(grounding.wikipedia.thumbnailUrl);
+    }
+    if (grounding.met?.imageUrl) {
+      slideImages.push(grounding.met.imageUrl);
+    }
+
+    // Deduplicate.
+    const uniqueSlideImages = [...new Set(slideImages)];
+
     res.json({
       success: true,
       analysis,
       grounding,
+      slideImages: uniqueSlideImages,
       raw,
     });
   } catch (error) {
@@ -275,96 +336,20 @@ async function generateVoice(script) {
   };
 }
 
-async function generateVeoVideo(promptText, imageBase64, mimeType) {
-  const ai = new GoogleGenAI({ apiKey: requireEnv("GEMINI_API_KEY") });
-  const model = process.env.VEO_MODEL || "veo-2.0-generate-001";
-
-  let operation;
+app.post("/generate-narration", async (req, res, next) => {
   try {
-    const params = {
-      model,
-      prompt: trimForRunway(promptText),
-      config: {
-        aspectRatio: process.env.VEO_ASPECT_RATIO || "16:9",
-        durationSeconds: Number(process.env.VEO_DURATION_SECONDS || 5),
-        numberOfVideos: 1,
-      },
-    };
-
-    // Use the uploaded artwork as the starting frame when available.
-    if (imageBase64 && mimeType) {
-      params.image = { imageBytes: imageBase64, mimeType };
-    }
-
-    operation = await ai.models.generateVideos(params);
-  } catch (error) {
-    throw providerError("Veo", error.status || 502, error.message, null);
-  }
-
-  // Poll until done (Veo is a long-running operation).
-  const pollIntervalMs = 8000;
-  const timeoutMs = Number(process.env.VEO_WAIT_TIMEOUT_MS || 600000);
-  const deadline = Date.now() + timeoutMs;
-
-  while (!operation.done) {
-    if (Date.now() > deadline) {
-      throw providerError("Veo", 504, "Video generation timed out.", null);
-    }
-    await new Promise((r) => setTimeout(r, pollIntervalMs));
-    try {
-      operation = await ai.operations.getVideosOperation({ operation });
-    } catch (error) {
-      throw providerError("Veo", 502, `Polling failed: ${error.message}`, null);
-    }
-  }
-
-  const generatedVideo = operation.response?.generatedVideos?.[0]?.video;
-  if (!generatedVideo) {
-    throw providerError("Veo", 502, "Veo returned no video in its response.", null);
-  }
-
-  // Download the video bytes and save locally so the frontend can stream it.
-  const filename = `video_${Date.now()}.mp4`;
-  const filePath = path.join(videoDir, filename);
-
-  if (generatedVideo.videoBytes) {
-    // Bytes returned directly (base64 or Buffer).
-    const buf = Buffer.isBuffer(generatedVideo.videoBytes)
-      ? generatedVideo.videoBytes
-      : Buffer.from(generatedVideo.videoBytes, "base64");
-    await fs.writeFile(filePath, buf);
-  } else if (generatedVideo.uri) {
-    // Signed URI — fetch and save.
-    const dlRes = await axios.get(generatedVideo.uri, {
-      responseType: "arraybuffer",
-      headers: { "x-goog-api-key": process.env.GEMINI_API_KEY },
-    });
-    await fs.writeFile(filePath, Buffer.from(dlRes.data));
-  } else {
-    throw providerError("Veo", 502, "Veo video has neither bytes nor URI.", null);
-  }
-
-  return { filename, url: `/media/video/${filename}` };
-}
-
-app.post("/generate-video", async (req, res, next) => {
-  try {
-    const { script, runwayPrompt, imageBase64, imageMimeType } = req.body;
+    const { script } = req.body;
 
     if (!script || typeof script !== "string") {
       res.status(400).json({ error: "Provide a non-empty script string." });
       return;
     }
 
-    const [audio, video] = await Promise.all([
-      generateVoice(script),
-      generateVeoVideo(runwayPrompt || script, imageBase64 || null, imageMimeType || null),
-    ]);
+    const audio = await generateVoice(script);
 
     res.json({
       success: true,
       audio,
-      videoUrl: video.url,
     });
   } catch (error) {
     next(error);

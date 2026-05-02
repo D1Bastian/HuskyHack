@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 
 const emptyAnalysis = {
@@ -6,7 +6,7 @@ const emptyAnalysis = {
   meaning: '',
   lore: '',
   videoScript: '',
-  runwayPrompt: '',
+  slideCaptions: [],
   groundingSummary: '',
 }
 
@@ -15,28 +15,111 @@ function App() {
   const [previewUrl, setPreviewUrl] = useState('')
   const [analysis, setAnalysis] = useState(emptyAnalysis)
   const [audioUrl, setAudioUrl] = useState('')
-  const [videoUrl, setVideoUrl] = useState('')
+  const [slideImages, setSlideImages] = useState([])
   const [sources, setSources] = useState([])
   const [status, setStatus] = useState('Choose an artwork image to begin.')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
 
+  // Slideshow state
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentSlide, setCurrentSlide] = useState(0)
+  const audioRef = useRef(null)
+  const slideTimerRef = useRef(null)
+
   const canGenerate = useMemo(
-    () => Boolean(analysis.videoScript && !isGenerating),
-    [analysis.videoScript, isGenerating],
+    () => Boolean(analysis.videoScript && !isGenerating && !audioUrl),
+    [analysis.videoScript, isGenerating, audioUrl],
   )
+
+  // Build slides: artwork first, then contextual Wikipedia images.
+  const slides = useMemo(() => {
+    const captions = Array.isArray(analysis.slideCaptions)
+      ? analysis.slideCaptions
+      : []
+
+    const images = []
+    // Slide 1: always the uploaded artwork.
+    if (previewUrl) images.push(previewUrl)
+    // Slides 2-4+: contextual images from Wikipedia (artist, era, museum, etc.)
+    slideImages.forEach((url) => {
+      if (url && !images.includes(url)) images.push(url)
+    })
+    // Only pad with artwork if we still have fewer than 4 slides.
+    while (images.length < Math.min(4, captions.length || 4) && previewUrl) {
+      images.push(previewUrl)
+    }
+
+    return images.map((src, i) => ({
+      src,
+      caption: captions[i] || '',
+      animation: ['kb-zoom-in', 'kb-pan-left', 'kb-zoom-out', 'kb-pan-right'][i % 4],
+    }))
+  }, [previewUrl, slideImages, analysis.slideCaptions])
+
+  // Auto-advance slides while audio is playing.
+  const startSlideshow = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio || slides.length === 0) return
+
+    setCurrentSlide(0)
+    setIsPlaying(true)
+    audio.currentTime = 0
+    audio.play().catch(() => {})
+
+    // Use audio duration if available, otherwise default to ~7s per slide.
+    const fallbackPerSlide = 7000
+    const getInterval = () => {
+      const dur = audio.duration
+      if (dur && Number.isFinite(dur) && dur > 0) {
+        return (dur / slides.length) * 1000
+      }
+      return fallbackPerSlide
+    }
+
+    clearInterval(slideTimerRef.current)
+
+    // Start advancing immediately with best-guess interval.
+    let interval = getInterval()
+    slideTimerRef.current = setInterval(() => {
+      // Re-check interval in case duration loaded late.
+      interval = getInterval()
+      setCurrentSlide((prev) => {
+        if (prev >= slides.length - 1) {
+          clearInterval(slideTimerRef.current)
+          setIsPlaying(false)
+          return prev
+        }
+        return prev + 1
+      })
+    }, interval)
+  }, [slides])
+
+  const stopSlideshow = useCallback(() => {
+    setIsPlaying(false)
+    clearInterval(slideTimerRef.current)
+    audioRef.current?.pause()
+  }, [])
+
+  // Stop when audio ends.
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    const onEnded = () => stopSlideshow()
+    audio.addEventListener('ended', onEnded)
+    return () => audio.removeEventListener('ended', onEnded)
+  }, [audioUrl, stopSlideshow])
 
   function handleFileChange(event) {
     const selectedFile = event.target.files?.[0]
     setFile(selectedFile || null)
     setAnalysis(emptyAnalysis)
     setAudioUrl('')
-    setVideoUrl('')
+    setSlideImages([])
     setSources([])
+    stopSlideshow()
 
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
-    }
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
 
     if (selectedFile) {
       setPreviewUrl(URL.createObjectURL(selectedFile))
@@ -54,6 +137,8 @@ function App() {
     }
 
     setIsAnalyzing(true)
+    setAudioUrl('')
+    stopSlideshow()
     setStatus('Analyzing artwork… grounding with Wikipedia & The Met…')
 
     try {
@@ -66,13 +151,12 @@ function App() {
       })
 
       const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || 'Analysis failed.')
-      }
+      if (!response.ok) throw new Error(data.error || 'Analysis failed.')
 
       setAnalysis({ ...emptyAnalysis, ...data.analysis })
       setSources(data.grounding?.sources || [])
-      setStatus('Analysis ready. Generate a video below.')
+      setSlideImages(data.slideImages || [])
+      setStatus('Analysis ready — generate the narration below.')
     } catch (error) {
       setStatus(error.message)
     } finally {
@@ -80,44 +164,27 @@ function App() {
     }
   }
 
-  async function generateVideo() {
+  async function generateNarration() {
     if (!analysis.videoScript) {
-      setStatus('Analyze an image first so there is a script to narrate.')
+      setStatus('Analyze an image first.')
       return
     }
 
     setIsGenerating(true)
-    setStatus('Generating voice and video with Veo — this takes a minute or two…')
+    setStatus('Generating narration with ElevenLabs…')
 
     try {
-      // Read the image as base64 so Veo can use it as the starting frame.
-      let imageBase64 = null
-      let imageMimeType = null
-      if (file) {
-        const buf = await file.arrayBuffer()
-        imageBase64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
-        imageMimeType = file.type
-      }
-
-      const response = await fetch('/generate-video', {
+      const response = await fetch('/generate-narration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          script: analysis.videoScript,
-          runwayPrompt: analysis.runwayPrompt,
-          imageBase64,
-          imageMimeType,
-        }),
+        body: JSON.stringify({ script: analysis.videoScript }),
       })
 
       const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || 'Video generation failed.')
-      }
+      if (!response.ok) throw new Error(data.error || 'Narration failed.')
 
       setAudioUrl(data.audio?.url || '')
-      setVideoUrl(data.videoUrl || '')
-      setStatus(data.videoUrl ? 'Video generated!' : 'Veo finished — no video URL returned.')
+      setStatus('Narration ready — press ▶ Play to watch the slideshow.')
     } catch (error) {
       setStatus(error.message)
     } finally {
@@ -130,7 +197,7 @@ function App() {
       <header className="app-header">
         <div className="logo-mark" aria-hidden="true">🎨</div>
         <span className="brand">ArtStories</span>
-        <span className="tagline">HuskyHack · Gemini × Wikipedia × The Met × ElevenLabs × Runway</span>
+        <span className="tagline">HuskyHack · Gemini × Wikipedia × The Met × ElevenLabs</span>
       </header>
 
       <main>
@@ -168,10 +235,10 @@ function App() {
               <button
                 type="button"
                 id="generate-btn"
-                onClick={generateVideo}
+                onClick={generateNarration}
                 disabled={!canGenerate}
               >
-                {isGenerating ? '⟳ Generating…' : '▶ Generate video'}
+                {isGenerating ? '⟳ Generating…' : '🎙 Generate narration'}
               </button>
             </div>
 
@@ -182,7 +249,7 @@ function App() {
           <div className="results-panel">
             <div className="panel-header">
               <h1>ArtStories</h1>
-              <p className="panel-subtitle">AI-grounded art history · lore · narration · video</p>
+              <p className="panel-subtitle">AI-grounded art history · lore · cinematic narration</p>
             </div>
 
             <div className="result-grid">
@@ -226,21 +293,48 @@ function App() {
               </article>
             </div>
 
-            {(audioUrl || videoUrl) && (
-              <div className="media-results">
-                {audioUrl && (
-                  <audio controls src={audioUrl}>
-                    <track kind="captions" />
-                  </audio>
-                )}
-                {videoUrl && (
-                  // eslint-disable-next-line jsx-a11y/media-has-caption
-                  <video
-                    controls
-                    src={videoUrl}
-                    style={{ maxWidth: '100%', borderRadius: '8px', marginTop: '8px' }}
-                  />
-                )}
+            {/* ── Slideshow Theater ── */}
+            {audioUrl && slides.length > 0 && (
+              <div className="theater">
+                <h2>🎬 Documentary</h2>
+
+                <div className="slideshow">
+                  {slides.map((slide, i) => (
+                    <div
+                      key={`slide-${i}`}
+                      className={`slide ${slide.animation} ${i === currentSlide ? 'active' : ''}`}
+                    >
+                      <img src={slide.src} alt={slide.caption || `Slide ${i + 1}`} />
+                      {slide.caption && (
+                        <div className="slide-caption">{slide.caption}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="theater-controls">
+                  <button
+                    type="button"
+                    className="play-btn"
+                    onClick={isPlaying ? stopSlideshow : startSlideshow}
+                  >
+                    {isPlaying ? '⏸ Pause' : '▶ Play Documentary'}
+                  </button>
+
+                  <div className="slide-dots">
+                    {slides.map((_, i) => (
+                      <span
+                        key={`dot-${i}`}
+                        className={`dot ${i === currentSlide ? 'active' : ''}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Hidden audio element for synced playback */}
+                <audio ref={audioRef} src={audioUrl} preload="auto">
+                  <track kind="captions" />
+                </audio>
               </div>
             )}
           </div>

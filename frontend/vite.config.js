@@ -11,7 +11,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/analyze': 'http://localhost:3000',
-      '/generate-video': 'http://localhost:3000',
+      '/generate-narration': 'http://localhost:3000',
       '/health': 'http://localhost:3000',
       '/media': 'http://localhost:3000',
     },
