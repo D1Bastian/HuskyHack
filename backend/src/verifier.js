@@ -44,6 +44,13 @@ Classification: ${m.classification || ""}`,
 }
 
 export async function verifyAnalysis(ai, analysis, grounding, communityMatch) {
+  if (communityMatch?.post) {
+    return {
+      artHistory: { status: "grounded", note: "Matched and grounded in a community blog post." },
+      meaning: { status: "grounded", note: "Matched and grounded in a community blog post." },
+    };
+  }
+
   const sourceText = buildSourceText(grounding, communityMatch);
 
   if (!sourceText.trim()) {
