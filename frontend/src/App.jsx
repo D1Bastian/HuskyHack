@@ -137,6 +137,9 @@ function ArtStoryExperience() {
   const [creations, setCreations] = useState([])
   const [creationImage, setCreationImage] = useState('')
   const [creationTitle, setCreationTitle] = useState('')
+  const [creationAuthor, setCreationAuthor] = useState('')
+  const [creationInspiration, setCreationInspiration] = useState('')
+  const [creationMeaning, setCreationMeaning] = useState('')
   const [creationStory, setCreationStory] = useState('')
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
@@ -350,6 +353,9 @@ function ArtStoryExperience() {
         id: String(Date.now()),
         image: creationImage,
         title: creationTitle.trim(),
+        author: creationAuthor.trim(),
+        inspiration: creationInspiration.trim(),
+        meaning: creationMeaning.trim(),
         story: creationStory.trim(),
         createdAt: new Date().toLocaleDateString(),
       },
@@ -357,7 +363,11 @@ function ArtStoryExperience() {
     ])
     setCreationImage('')
     setCreationTitle('')
+    setCreationAuthor('')
+    setCreationInspiration('')
+    setCreationMeaning('')
     setCreationStory('')
+    setView('gallery')
   }
 
   const navItems = [
@@ -639,6 +649,20 @@ function ArtStoryExperience() {
             )}
 
             <div className="post-grid">
+              {/* Local Creations */}
+              {creations.map((creation) => (
+                <div key={creation.id} className="post-card">
+                  <div className="post-thumb">
+                    <img src={creation.image} alt={creation.title} />
+                  </div>
+                  <div className="post-meta">
+                    <h3>{creation.title}</h3>
+                    <span className="post-author">by {creation.author || 'Anonymous'}</span>
+                  </div>
+                </div>
+              ))}
+
+              {/* Remote Blog Posts */}
               {blogPosts.map((post) => (
                 <Link key={post.id} to={`/blog/${post.id}`} className="post-card">
                   <div className="post-thumb">
@@ -676,73 +700,95 @@ function ArtStoryExperience() {
             <p>Keep a small local collection of art and the stories behind it.</p>
           </section>
 
-          <section className="creation-form">
-            <button
-              className="creation-drop"
-              type="button"
-              onClick={() => creationInputRef.current?.click()}
-            >
-              {creationImage ? (
-                <img alt="Creation preview" src={creationImage} />
-              ) : (
-                <>
-                  <Icon name="upload" />
-                  <span>Click to upload</span>
-                </>
-              )}
-            </button>
-            <input
-              accept="image/*"
-              className="hidden-input"
-              onChange={handleCreationFile}
-              ref={creationInputRef}
-              type="file"
-            />
+          <section className="blog-shell">
+            <div className="form-grid">
+              <div className="form-image-stage">
+                <div className="placeholder">
+                  {creationImage ? (
+                    <>
+                      <img alt="Creation preview" src={creationImage} />
+                      <label className="file-picker overlay-picker">
+                        <span>↺ Change image</span>
+                        <input
+                          accept="image/*"
+                          onChange={handleCreationFile}
+                          type="file"
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <label className="file-picker">
+                      <Icon name="upload" />
+                      <span>Upload image</span>
+                      <input
+                        accept="image/*"
+                        onChange={handleCreationFile}
+                        type="file"
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
 
-            <div className="creation-fields">
-              <label>
-                Title
-                <input
-                  onChange={(event) => setCreationTitle(event.target.value)}
-                  placeholder="Give your artwork a title"
-                  type="text"
-                  value={creationTitle}
-                />
-              </label>
-              <label>
-                Your Story
-                <textarea
-                  onChange={(event) => setCreationStory(event.target.value)}
-                  placeholder="What inspired it? What does it mean to you?"
-                  rows="7"
-                  value={creationStory}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={saveCreation}
-                disabled={!creationImage || !creationTitle.trim() || !creationStory.trim()}
-              >
-                <Icon name="save" />
-                Save Creation
-              </button>
+              <div className="form-fields">
+                <label>
+                  <span>Title</span>
+                  <input
+                    onChange={(event) => setCreationTitle(event.target.value)}
+                    placeholder="e.g. Untitled (Blue Husky)"
+                    type="text"
+                    value={creationTitle}
+                  />
+                </label>
+                <label>
+                  <span>Artist / Author</span>
+                  <input
+                    onChange={(event) => setCreationAuthor(event.target.value)}
+                    placeholder="Your name"
+                    type="text"
+                    value={creationAuthor}
+                  />
+                </label>
+                <label>
+                  <span>Inspiration</span>
+                  <textarea
+                    onChange={(event) => setCreationInspiration(event.target.value)}
+                    placeholder="What sparked this piece?"
+                    rows="3"
+                    value={creationInspiration}
+                  />
+                </label>
+                <label>
+                  <span>Meaning</span>
+                  <textarea
+                    onChange={(event) => setCreationMeaning(event.target.value)}
+                    placeholder="Symbolism, intent, themes…"
+                    rows="3"
+                    value={creationMeaning}
+                  />
+                </label>
+                <label>
+                  <span>Story</span>
+                  <textarea
+                    onChange={(event) => setCreationStory(event.target.value)}
+                    placeholder="Anything else worth knowing about this piece."
+                    rows="5"
+                    value={creationStory}
+                  />
+                </label>
+                <button
+                  className="full-button"
+                  type="button"
+                  onClick={saveCreation}
+                  disabled={!creationImage || !creationTitle.trim() || !creationStory.trim()}
+                >
+                  ✦ Publish post
+                </button>
+              </div>
             </div>
           </section>
 
-          {creations.length > 0 && (
-            <section className="saved-creations">
-              {creations.map((creation) => (
-                <article key={creation.id}>
-                  <img alt={creation.title} src={creation.image} />
-                  <div>
-                    <h2>{creation.title}</h2>
-                    <p>{creation.story}</p>
-                    <span>{creation.createdAt}</span>
-                  </div>
-                </article>
-              ))}
-            </section>
-          )}
+
         </main>
       )}
 
