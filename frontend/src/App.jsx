@@ -91,6 +91,12 @@ function Icon({ name }) {
     heart: (
       <path d="M20.8 5.6a5.4 5.4 0 0 0-7.6 0L12 6.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 22l8.8-8.8a5.4 5.4 0 0 0 0-7.6z" />
     ),
+    camera: (
+      <>
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+        <circle cx="12" cy="13" r="4" />
+      </>
+    ),
     save: (
       <>
         <path d="M19 21H5V3h11l3 3z" />
@@ -133,6 +139,7 @@ function ArtStoryExperience() {
   const [creationTitle, setCreationTitle] = useState('')
   const [creationStory, setCreationStory] = useState('')
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
   const creationInputRef = useRef(null)
 
   useEffect(() => {
@@ -439,10 +446,24 @@ function ArtStoryExperience() {
                     ref={fileInputRef}
                     type="file"
                   />
-                  <button type="button" className="secondary-button" onClick={() => fileInputRef.current?.click()}>
-                    <Icon name="upload" />
-                    Choose from computer
-                  </button>
+                  <input
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden-input"
+                    onChange={handleFileChange}
+                    ref={cameraInputRef}
+                    type="file"
+                  />
+                  <div className="drop-zone-buttons">
+                    <button type="button" className="secondary-button" onClick={() => fileInputRef.current?.click()}>
+                      <Icon name="upload" />
+                      Choose from device
+                    </button>
+                    <button type="button" className="secondary-button camera-button" onClick={() => cameraInputRef.current?.click()}>
+                      <Icon name="camera" />
+                      Take a photo
+                    </button>
+                  </div>
                 </div>
 
                 <div className="or-divider">

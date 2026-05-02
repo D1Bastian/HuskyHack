@@ -244,6 +244,23 @@ button {
   color: var(--muted);
 }
 
+.drop-zone-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.camera-button {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .camera-button {
+    display: inline-flex;
+  }
+}
+
 .hidden-input {
   display: none;
 }
