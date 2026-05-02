@@ -187,7 +187,7 @@ export default function Home() {
 
           <article>
             <h2>Grounding</h2>
-            <p>{analysis.groundingSummary || 'Wikipedia and Met Museum source matches will appear here.'}</p>
+            <p>{analysis.groundingSummary || 'Wikipedia and community source matches will appear here.'}</p>
             {sources.length > 0 && (
               <div className="source-list">
                 {sources.map((source) => {

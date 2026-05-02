@@ -237,7 +237,7 @@ function ArtStoryExperience() {
 
     setIsAnalyzing(true)
     setView('analysis')
-    setStatus('Analyzing artwork and grounding with Wikipedia and The Met...')
+    setStatus('Analyzing artwork and grounding with Wikipedia and community sources...')
 
     try {
       const data = await analyzeImage(file)
@@ -386,7 +386,7 @@ function ArtStoryExperience() {
       {view === 'home' && (
         <main className="home-page">
           <section className="hero-copy">
-            <p className="eyebrow">Gemini + Wikipedia + The Met + ElevenLabs + Runway</p>
+            <p className="eyebrow">Gemini + Wikipedia + ElevenLabs + Runway</p>
             <h1>Welcome to ArtStory</h1>
             <p>Discover the stories, emotions, and history behind any artwork.</p>
           </section>
