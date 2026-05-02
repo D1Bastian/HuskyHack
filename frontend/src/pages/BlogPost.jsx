@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { getPost } from '../lib/api.js'
+import { getPost, resolveBackendUrl } from '../lib/api.js'
 
 export default function BlogPost() {
   const { id } = useParams()
@@ -23,7 +23,7 @@ export default function BlogPost() {
     <section className="blog-shell">
       <article className="post-detail">
         <div className="post-detail-image">
-          <img src={post.image_url} alt={post.title} />
+          <img src={resolveBackendUrl(post.image_url)} alt={post.title} />
         </div>
         <div className="post-detail-body">
           <h1>{post.title}</h1>

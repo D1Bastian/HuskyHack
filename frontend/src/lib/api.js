@@ -1,12 +1,25 @@
-const API_BASE = import.meta.env.VITE_API_URL ?? ''
+/**
+ * Base URL for all backend API calls.
+ *
+ * - Local dev: empty string (Vite proxy forwards /analyze, /api, etc. to localhost:3000)
+ * - Production: set VITE_API_URL in Vercel env vars to the backend's absolute URL
+ *   e.g. https://artstories-backend.onrender.com
+ */
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
 
-function mediaUrl(path) {
-  if (!path || path.startsWith('http')) return path
-  return `${API_BASE}${path}`
+/**
+ * Resolve a backend path to a full URL.
+ * Works for both API endpoints and media paths (e.g. /media/posts/image.jpg).
+ */
+export function resolveBackendUrl(path) {
+  if (!path) return path
+  // Already absolute — leave as-is.
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  return `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`
 }
 
 function withMediaUrl(post) {
-  return { ...post, image_url: mediaUrl(post.image_url) }
+  return { ...post, image_url: resolveBackendUrl(post.image_url) }
 }
 
 export async function listPosts() {
@@ -60,3 +73,5 @@ export async function generateMedia({ script }) {
   if (!response.ok) throw new Error(data.error || 'Narration generation failed.')
   return data
 }
+
+export { generateMedia as generateNarration }
