@@ -23,7 +23,7 @@ const galleryArtworks = [
     id: 'sunset-dreams',
     image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=900&auto=format&fit=crop',
     title: 'Sunset Dreams',
-    artist: '@artlover',
+    artist: 'Elena Vasquez',
     description: 'A serene landscape study with warm horizon light and a quiet mountain silhouette.',
     views: 127,
     likes: 45,
@@ -32,7 +32,7 @@ const galleryArtworks = [
     id: 'urban-chaos',
     image: 'https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=900&auto=format&fit=crop',
     title: 'Urban Chaos',
-    artist: '@cityscapes',
+    artist: 'Marcus Okafor',
     description: 'Bold color fields and restless geometry turn the city into a visual rhythm.',
     views: 234,
     likes: 89,
@@ -41,7 +41,7 @@ const galleryArtworks = [
     id: 'still-peace',
     image: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=900&auto=format&fit=crop',
     title: 'Still Peace',
-    artist: '@florals',
+    artist: 'Suki Tanaka',
     description: 'Soft botanical forms, calm contrast, and a palette built around small details.',
     views: 156,
     likes: 62,
@@ -600,8 +600,8 @@ function ArtStoryExperience() {
           </section>
 
           <section className="blog-shell gallery-blog-section">
-            <div className="blog-header">
-              <Link to="/blog/new" className="primary-link">+ New post</Link>
+            <div className="blog-header" style={{justifyContent: 'center'}}>
+              <Link to="/blog/new" className="new-post-button">+ New post</Link>
             </div>
 
             {blogLoading && <p className="status">Loading posts…</p>}
@@ -624,28 +624,20 @@ function ArtStoryExperience() {
                 </Link>
               ))}
             </div>
-          </section>
-
-          <section className="gallery-grid">
-            {galleryArtworks.map((artwork) => {
-              const isLiked = likedArtworks.has(artwork.id)
-              return (
-                <article className="gallery-card" key={artwork.id}>
-                  <img alt={artwork.title} src={artwork.image} />
-                  <div>
-                    <h2>{artwork.title}</h2>
-                    <p>{artwork.artist}</p>
-                    <p>{artwork.description}</p>
-                    <footer>
-                      <span><Icon name="eye" />{artwork.views}</span>
-                      <button className={isLiked ? 'liked' : ''} type="button" onClick={() => toggleLike(artwork.id)}>
-                        <Icon name="heart" />{artwork.likes + (isLiked ? 1 : 0)}
-                      </button>
-                    </footer>
-                  </div>
-                </article>
-              )
-            })}
+            <section className="gallery-grid gallery-grid-inset">
+              {galleryArtworks.map((artwork) => {
+                const isLiked = likedArtworks.has(artwork.id)
+                return (
+                  <article className="gallery-card" key={artwork.id}>
+                    <img alt={artwork.title} src={artwork.image} />
+                    <div>
+                      <h2>{artwork.title}</h2>
+                      <p>By <strong>{artwork.artist}</strong></p>
+                    </div>
+                  </article>
+                )
+              })}
+            </section>
           </section>
         </main>
       )}

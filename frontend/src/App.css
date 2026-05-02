@@ -554,13 +554,16 @@ button:disabled {
 .gallery-card h2,
 .saved-creations h2 {
   margin: 0 0 4px;
-  font-size: 1.08rem;
+  font-size: 1.15rem;
+  color: var(--blue);
+  font-weight: 700;
 }
 
 .gallery-card p {
   margin: 0 0 12px;
   color: var(--muted);
   line-height: 1.55;
+  font-weight: 900;
 }
 
 .gallery-card footer {
@@ -754,16 +757,19 @@ button:disabled {
 }
 
 .blog-shell {
-  background: var(--paper);
+  background: #ffffff;
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   padding: 30px;
 }
 
 .gallery-blog-section {
   margin-bottom: 48px;
+}
+
+.gallery-grid-inset {
+  margin-top: 28px;
 }
 
 .blog-header {
@@ -791,10 +797,29 @@ button:disabled {
 
 .primary-link,
 .back-link,
-.blog-shell a {
+.blog-shell a:not(.new-post-button) {
   color: var(--blue);
   font-weight: 800;
   text-decoration: none;
+}
+
+.new-post-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px 28px;
+  background: #000000;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-decoration: none;
+  border-radius: var(--radius);
+  transition: opacity 160ms ease;
+}
+
+.new-post-button:hover {
+  opacity: 0.82;
 }
 
 .post-grid {

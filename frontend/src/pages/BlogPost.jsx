@@ -21,8 +21,6 @@ export default function BlogPost() {
 
   return (
     <section className="blog-shell">
-      <Link to="/blog" className="back-link">← Back to blog</Link>
-
       <article className="post-detail">
         <div className="post-detail-image">
           <img src={post.image_url} alt={post.title} />
