@@ -110,12 +110,16 @@ async function fetchWikipediaImages(queries) {
     .filter(Boolean);
 }
 
-const stripJsonFences = (text) =>
-  text
+const stripJsonFences = (text) => {
+  const s = text
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
+  const start = s.indexOf("{");
+  const end = s.lastIndexOf("}");
+  return start !== -1 && end > start ? s.slice(start, end + 1) : s;
+};
 
 const parseGeminiAnalysis = (text) => {
   try {
@@ -272,16 +276,28 @@ Body: ${communityMatch.post.body}
 `
       : "";
 
+    const hasAnySources = !!(communityMatch || grounding.wikipedia || grounding.met);
+
+    const artHistoryInstruction = hasAnySources
+      ? "Speak as an expert who loves this piece. Tell its history in your own words — who made it, when, why it matters, what the era felt like. Cite sources naturally if they helped."
+      : "No verified sources were found for this artwork. Write exactly 1-2 sentences describing ONLY what is directly visible in the image — medium, style, subject matter. Do NOT name the artist, invent a title, guess a date, or claim any historical fact. End with: 'No sources found — add this piece to the community blog to share its story.'";
+
+    const meaningInstruction = hasAnySources
+      ? "What does this work *do* to you? Interpret its symbolism, composition, mood, and cultural weight the way a specialist who has spent years with art would — with conviction and nuance."
+      : "Describe only the visual mood, colour palette, and composition you can see. Do NOT claim symbolic intent or cultural meaning that would require knowledge of the artist's background.";
+
     const prompt = `
 You are a captivated, opinionated art specialist — part historian, part storyteller, part obsessive. You speak in your own voice: warm, authoritative, full of genuine fascination. You don't produce reports; you share what grips you about a work.
 
-Use the grounding data below as your factual foundation, but let your personality breathe through the writing. When you're uncertain, say so with intellectual humility — not disclaimers.
+Use the grounding data below as your factual foundation, but let your personality breathe through the writing.
 
 Rules:
 - Treat Wikipedia and The Met as grounding, not as infallible proof.
 - ${communityMatch
         ? "A community blog post matches this artwork. Trust it as the primary source — it was written by the artwork's community."
-        : "If the image and sources do not clearly match, say \"uncertain\" instead of guessing."}
+        : hasAnySources
+          ? "If the image and sources do not clearly match, say \"uncertain\" instead of guessing."
+          : "NO SOURCES WERE FOUND. You must not invent historical facts, artist names, dates, or any specific details. Stick strictly to what is visually observable."}
 - Separate fact from interpretation and fiction.
 - Cite source names naturally in factual analysis when relevant.
 
@@ -294,8 +310,8 @@ ${JSON.stringify(grounding, null, 2)}
 
 Return strict JSON only, with these fields:
 {
-  "artHistory": "Speak as an expert who loves this piece. Tell its history in your own words — who made it, when, why it matters, what the era felt like. Cite sources naturally if they helped. If uncertain, admit it with curiosity not caution.",
-  "meaning": "What does this work *do* to you? Interpret its symbolism, composition, mood, and cultural weight the way a specialist who has spent years with art would — with conviction and nuance.",
+  "artHistory": "${artHistoryInstruction}",
+  "meaning": "${meaningInstruction}",
   "lore": "Invent a vivid, clearly fictional myth or legend this artwork could have inspired. Make it feel ancient, poetic, and earned by the image itself.",
   "videoScript": "Write a 30-second cinematic voiceover — one flowing paragraph — in the voice of this art specialist. Evocative, rhythmic, made to be spoken aloud while slides display.",
   "slideCaptions": ["Array of exactly 4 short, evocative one-sentence captions for a documentary slideshow: (1) introduce the piece, (2) the artist or historical context, (3) the emotional/symbolic core, (4) closing poetic thought."],

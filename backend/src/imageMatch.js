@@ -6,12 +6,13 @@ import { getAllPostsWithHash } from "./db.js";
 const HASH_SIZE = 8;
 const PHASH_DOWNSCALE = 32;
 const STRONG_MATCH_DISTANCE = 8;
-const CANDIDATE_DISTANCE = 18;
+const CANDIDATE_DISTANCE = 20;
 const MAX_CANDIDATES = 4;
 
-export async function computePHash(imagePath) {
-  const raw = await sharp(imagePath)
-    .greyscale()
+async function hashImageRegion(imagePath, extractOptions) {
+  let pipeline = sharp(imagePath).greyscale();
+  if (extractOptions) pipeline = pipeline.extract(extractOptions);
+  const raw = await pipeline
     .resize(PHASH_DOWNSCALE, PHASH_DOWNSCALE, { fit: "fill" })
     .raw()
     .toBuffer();
@@ -39,6 +40,34 @@ export async function computePHash(imagePath) {
     }
   }
   return bitsToHex(bits);
+}
+
+export async function computePHash(imagePath) {
+  return hashImageRegion(imagePath, null);
+}
+
+export async function computeTileHashes(imagePath) {
+  const meta = await sharp(imagePath).metadata();
+  const w = meta.width;
+  const h = meta.height;
+  const hw = Math.floor(w / 2);
+  const hh = Math.floor(h / 2);
+
+  const regions = [
+    { left: 0,  top: 0,  width: hw,     height: h      }, // left half
+    { left: hw, top: 0,  width: w - hw, height: h      }, // right half
+    { left: 0,  top: 0,  width: w,      height: hh     }, // top half
+    { left: 0,  top: hh, width: w,      height: h - hh }, // bottom half
+    { left: 0,  top: 0,  width: hw,     height: hh     }, // TL quadrant
+    { left: hw, top: 0,  width: w - hw, height: hh     }, // TR quadrant
+    { left: 0,  top: hh, width: hw,     height: h - hh }, // BL quadrant
+    { left: hw, top: hh, width: w - hw, height: h - hh }, // BR quadrant
+  ];
+
+  const hashes = await Promise.all(
+    regions.map((r) => hashImageRegion(imagePath, r).catch(() => null)),
+  );
+  return hashes.filter(Boolean);
 }
 
 function dct2d(pixels, size) {
@@ -95,7 +124,21 @@ function popcount(n) {
 export function findCandidates(queryHash) {
   const all = getAllPostsWithHash();
   const scored = all
-    .map((post) => ({ post, distance: hammingDistance(queryHash, post.phash) }))
+    .map((post) => {
+      const fullDist = hammingDistance(queryHash, post.phash);
+      let tileMin = Infinity;
+      try {
+        const tiles = JSON.parse(post.tile_phashes || "[]");
+        for (const tileHash of tiles) {
+          const d = hammingDistance(queryHash, tileHash);
+          if (d < tileMin) tileMin = d;
+        }
+      } catch {
+        // ignore malformed tile data
+      }
+      const distance = Math.min(fullDist, tileMin);
+      return { post, distance };
+    })
     .filter((entry) => entry.distance <= CANDIDATE_DISTANCE)
     .sort((a, b) => a.distance - b.distance)
     .slice(0, MAX_CANDIDATES);
@@ -157,7 +200,10 @@ Be conservative. Only declare a match if you are confident the candidate depicts
       model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
       contents,
     });
-    const text = (response.text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    const raw = (response.text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    const jsonStart = raw.indexOf("{");
+    const jsonEnd = raw.lastIndexOf("}");
+    const text = jsonStart !== -1 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd + 1) : raw;
     const parsed = JSON.parse(text);
     if (
       typeof parsed.matchIndex === "number" &&

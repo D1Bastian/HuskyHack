@@ -1,6 +1,6 @@
 const LABELS = {
-  grounded: 'Grounded in sources',
-  partial: 'Partially grounded',
+  grounded: 'Verified',
+  partial: 'Partially verified',
   unverified: 'Unverified',
 }
 

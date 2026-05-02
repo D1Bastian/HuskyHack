@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import express from "express";
 import multer from "multer";
 import { createPost, listPosts, getPost, deletePost } from "./db.js";
-import { computePHash } from "./imageMatch.js";
+import { computePHash, computeTileHashes } from "./imageMatch.js";
 
 export function createBlogRouter({ postsDir }) {
   const router = express.Router();
@@ -63,7 +63,10 @@ export function createBlogRouter({ postsDir }) {
         return;
       }
 
-      const phash = await computePHash(req.file.path);
+      const [phash, tileHashes] = await Promise.all([
+        computePHash(req.file.path),
+        computeTileHashes(req.file.path),
+      ]);
 
       const post = createPost({
         title: String(title).trim(),
@@ -74,6 +77,7 @@ export function createBlogRouter({ postsDir }) {
         image_path: req.file.path,
         image_filename: req.file.filename,
         phash,
+        tile_phashes: JSON.stringify(tileHashes),
       });
 
       res.status(201).json({ post });
