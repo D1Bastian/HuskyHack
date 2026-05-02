@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Route, Routes } from 'react-router-dom'
 import backgroundVideo from './assets/Art_Background.mp4'
 import './App.css'
 import VerificationBadge from './components/VerificationBadge.jsx'
-import { analyzeImage, generateMedia } from './lib/api.js'
+import { analyzeImage, generateNarration } from './lib/api.js'
 import BlogList from './pages/BlogList.jsx'
 import BlogNew from './pages/BlogNew.jsx'
 import BlogPost from './pages/BlogPost.jsx'
@@ -13,7 +13,8 @@ const emptyAnalysis = {
   meaning: '',
   lore: '',
   videoScript: '',
-  runwayPrompt: '',
+  slideCaptions: [],
+  slideSearchQueries: [],
   groundingSummary: '',
 }
 
@@ -130,6 +131,11 @@ function ArtStoryExperience() {
   const [creationStory, setCreationStory] = useState('')
   const fileInputRef = useRef(null)
   const creationInputRef = useRef(null)
+  const audioRef = useRef(null)
+  const slideTimerRef = useRef(null)
+  const [slideImages, setSlideImages] = useState([])
+  const [currentSlide, setCurrentSlide] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(false)
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -147,6 +153,10 @@ function ArtStoryExperience() {
     setSources([])
     setVerification(null)
     setCommunityMatch(null)
+    setSlideImages([])
+    setCurrentSlide(0)
+    setIsPlaying(false)
+    clearInterval(slideTimerRef.current)
   }
 
   function selectArtwork(selectedFile) {
@@ -245,10 +255,11 @@ function ArtStoryExperience() {
       setSources(data.grounding?.sources || [])
       setVerification(data.verification || null)
       setCommunityMatch(data.communityMatch || null)
+      setSlideImages(data.slideImages || [])
       setStatus(
         data.communityMatch
           ? `Matched community blog post: "${data.communityMatch.post.title}".`
-          : 'Analysis ready. Generate a narrated video when you are ready.',
+          : 'Analysis ready. Generate narration when you are ready.',
       )
     } catch (error) {
       setStatus(error.message)
@@ -264,22 +275,73 @@ function ArtStoryExperience() {
     }
 
     setIsGenerating(true)
-    setStatus('Generating narration and video...')
+    setStatus('Generating narration with ElevenLabs...')
 
     try {
-      const data = await generateMedia({
-        script: analysis.videoScript,
-        runwayPrompt: analysis.runwayPrompt,
-      })
+      const data = await generateNarration(analysis.videoScript)
       setAudioUrl(data.audio?.url || '')
-      setVideoUrl(data.videoUrl || '')
-      setStatus(data.videoUrl ? 'Video generated.' : 'Runway finished without a video URL.')
+      setStatus(data.audio?.url ? 'Narration ready — press Play Documentary below.' : 'Narration finished without audio.')
     } catch (error) {
       setStatus(error.message)
     } finally {
       setIsGenerating(false)
     }
   }
+
+  // Build slides: artwork first, then contextual Wikipedia/Commons images (no repeats).
+  const slides = useMemo(() => {
+    const captions = Array.isArray(analysis.slideCaptions) ? analysis.slideCaptions : []
+    const images = []
+    // Slide 1 is always the uploaded artwork.
+    if (previewUrl) images.push(previewUrl)
+    // Remaining slides are contextual images — never repeat the artwork.
+    slideImages.forEach((url) => { if (url && !images.includes(url)) images.push(url) })
+
+    const animations = ['kb-zoom-in', 'kb-pan-left', 'kb-zoom-out', 'kb-pan-right', 'kb-zoom-in']
+    return images.map((src, i) => ({
+      src,
+      caption: captions[i] || '',
+      animation: animations[i % animations.length],
+    }))
+  }, [previewUrl, slideImages, analysis.slideCaptions])
+
+  const startSlideshow = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio || slides.length === 0) return
+    setCurrentSlide(0)
+    setIsPlaying(true)
+    audio.currentTime = 0
+    audio.play().catch(() => {})
+    clearInterval(slideTimerRef.current)
+    const getInterval = () => {
+      const dur = audio.duration
+      return dur && Number.isFinite(dur) && dur > 0 ? (dur / slides.length) * 1000 : 7000
+    }
+    slideTimerRef.current = setInterval(() => {
+      setCurrentSlide((prev) => {
+        if (prev >= slides.length - 1) {
+          clearInterval(slideTimerRef.current)
+          setIsPlaying(false)
+          return prev
+        }
+        return prev + 1
+      })
+    }, getInterval())
+  }, [slides])
+
+  const stopSlideshow = useCallback(() => {
+    setIsPlaying(false)
+    clearInterval(slideTimerRef.current)
+    audioRef.current?.pause()
+  }, [])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    const onEnded = () => stopSlideshow()
+    audio.addEventListener('ended', onEnded)
+    return () => audio.removeEventListener('ended', onEnded)
+  }, [audioUrl, stopSlideshow])
 
   function clearArtwork() {
     if (objectUrl) {
@@ -553,28 +615,48 @@ function ArtStoryExperience() {
                 <h2>Narration Script</h2>
                 <p>{analysis.videoScript || 'A voiceover-ready script will appear here after analysis.'}</p>
               </article>
-              <article>
-                <h2>Runway Prompt</h2>
-                <p>{analysis.runwayPrompt || 'The cinematic prompt for text-to-video generation will appear here.'}</p>
-              </article>
 
               <div className="generate-panel">
                 <button type="button" onClick={generateVideo} disabled={!canGenerate}>
                   <Icon name="video" />
-                  {isGenerating ? 'Generating...' : 'Generate Narrated Video'}
+                  {isGenerating ? 'Generating...' : '🎙 Generate Narration'}
                 </button>
-                {(audioUrl || videoUrl) && (
+
+                {audioUrl && slides.length > 0 && (
+                  <div className="theater">
+                    <h2>🎬 Documentary</h2>
+                    <div className="slideshow">
+                      {slides.map((slide, i) => (
+                        <div
+                          key={`slide-${i}`}
+                          className={`slide ${slide.animation} ${i === currentSlide ? 'active' : ''}`}
+                        >
+                          <img src={slide.src} alt={slide.caption || `Slide ${i + 1}`} />
+                          {slide.caption && <div className="slide-caption">{slide.caption}</div>}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="theater-controls">
+                      <button type="button" className="play-btn" onClick={isPlaying ? stopSlideshow : startSlideshow}>
+                        {isPlaying ? '⏸ Pause' : '▶ Play Documentary'}
+                      </button>
+                      <div className="slide-dots">
+                        {slides.map((_, i) => (
+                          <span key={`dot-${i}`} className={`dot ${i === currentSlide ? 'active' : ''}`} />
+                        ))}
+                      </div>
+                    </div>
+                    <audio ref={audioRef} src={audioUrl} preload="auto">
+                      <track kind="captions" />
+                    </audio>
+                  </div>
+                )}
+
+                {audioUrl && slides.length === 0 && (
                   <div className="media-results">
-                    {audioUrl && (
-                      <audio controls src={audioUrl}>
-                        <track kind="captions" />
-                      </audio>
-                    )}
-                    {videoUrl && (
-                      <a href={videoUrl} rel="noreferrer" target="_blank">
-                        Open generated video
-                      </a>
-                    )}
+                    <audio controls src={audioUrl}>
+                      <track kind="captions" />
+                    </audio>
                   </div>
                 )}
               </div>

@@ -31,13 +31,13 @@ export async function analyzeImage(file) {
   return data
 }
 
-export async function generateMedia({ script, runwayPrompt }) {
-  const response = await fetch('/generate-video', {
+export async function generateNarration(script) {
+  const response = await fetch('/generate-narration', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ script, runwayPrompt }),
+    body: JSON.stringify({ script }),
   })
   const data = await response.json()
-  if (!response.ok) throw new Error(data.error || 'Video generation failed.')
+  if (!response.ok) throw new Error(data.error || 'Narration failed.')
   return data
 }

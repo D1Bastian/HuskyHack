@@ -66,48 +66,116 @@ const requireEnv = (name) => {
 };
 
 /**
- * Fetch images from Wikipedia for an array of search queries.
- * Uses the Wikipedia REST API page summary endpoint which returns thumbnails.
- * Returns an array of image URLs (skips queries that don't yield an image).
+ * Fetch a single image from Wikipedia for a query string.
+ * Tries: (1) direct page summary, (2) search + page summary, (3) Wikimedia Commons.
  */
-async function fetchWikipediaImages(queries) {
-  if (!Array.isArray(queries) || queries.length === 0) return [];
+async function fetchOneWikipediaImage(query) {
+  const encoded = encodeURIComponent(query.trim());
 
-  const results = await Promise.allSettled(
-    queries.map(async (query) => {
-      const encoded = encodeURIComponent(query.trim());
+  // Strategy 1: Direct page lookup.
+  try {
+    const res = await axios.get(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encoded}`,
+      { timeout: 5000 },
+    );
+    const img = res.data?.originalimage?.source || res.data?.thumbnail?.source;
+    if (img) return img;
+  } catch {
+    // Not found — try next strategy.
+  }
 
-      // First try direct page lookup.
-      const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encoded}`;
+  // Strategy 2: Search Wikipedia, take the best result's image.
+  try {
+    const searchRes = await axios.get(
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encoded}&srlimit=3&format=json&origin=*`,
+      { timeout: 5000 },
+    );
+    const titles = searchRes.data?.query?.search?.map((r) => r.title) || [];
+    for (const title of titles) {
       try {
-        const res = await axios.get(summaryUrl, { timeout: 5000 });
-        const img =
-          res.data?.originalimage?.source ||
-          res.data?.thumbnail?.source;
+        const fbRes = await axios.get(
+          `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+          { timeout: 4000 },
+        );
+        const img = fbRes.data?.originalimage?.source || fbRes.data?.thumbnail?.source;
         if (img) return img;
       } catch {
-        // Page not found — fall through to search.
+        // Skip this result.
       }
+    }
+  } catch {
+    // Search failed.
+  }
 
-      // Fallback: search Wikipedia and use the first result's image.
-      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encoded}&srlimit=1&format=json&origin=*`;
-      try {
-        const searchRes = await axios.get(searchUrl, { timeout: 5000 });
-        const title = searchRes.data?.query?.search?.[0]?.title;
-        if (!title) return null;
+  // Strategy 3: Wikimedia Commons file search (great for art, artists, museums).
+  try {
+    const commonsRes = await axios.get(
+      `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encoded}&srnamespace=6&srlimit=1&format=json&origin=*`,
+      { timeout: 5000 },
+    );
+    const fileTitle = commonsRes.data?.query?.search?.[0]?.title;
+    if (fileTitle) {
+      const infoRes = await axios.get(
+        `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url&iiurlwidth=800&format=json&origin=*`,
+        { timeout: 5000 },
+      );
+      const pages = infoRes.data?.query?.pages || {};
+      const page = Object.values(pages)[0];
+      const img = page?.imageinfo?.[0]?.thumburl || page?.imageinfo?.[0]?.url;
+      if (img) return img;
+    }
+  } catch {
+    // Commons failed.
+  }
 
-        const fallbackUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-        const fbRes = await axios.get(fallbackUrl, { timeout: 5000 });
-        return fbRes.data?.originalimage?.source || fbRes.data?.thumbnail?.source || null;
-      } catch {
-        return null;
-      }
-    }),
+  return null;
+}
+
+/**
+ * Fetch diverse contextual images for the slideshow.
+ * Takes Gemini's search queries + identification data for robust fallbacks.
+ */
+async function fetchSlideImages(queries, identification, grounding) {
+  // Build a broad list of queries: Gemini's suggestions + smart fallbacks.
+  const allQueries = [...(queries || [])];
+
+  // Add fallback queries from identification if Gemini's aren't enough.
+  const artist = identification?.artistGuess;
+  const title = identification?.titleGuess;
+  if (artist && artist !== "uncertain" && !allQueries.some((q) => q.toLowerCase().includes(artist.toLowerCase()))) {
+    allQueries.push(artist);
+  }
+  if (title && title !== "uncertain" && !allQueries.some((q) => q.toLowerCase().includes(title.toLowerCase()))) {
+    allQueries.push(title);
+  }
+
+  // Deduplicate queries (case-insensitive).
+  const seen = new Set();
+  const uniqueQueries = allQueries.filter((q) => {
+    const key = q.toLowerCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  console.log("[slideshow] Fetching images for queries:", uniqueQueries);
+
+  const results = await Promise.allSettled(
+    uniqueQueries.map((q) => fetchOneWikipediaImage(q)),
   );
 
-  return results
+  const images = results
     .map((r) => (r.status === "fulfilled" ? r.value : null))
     .filter(Boolean);
+
+  // Also include grounding images.
+  if (grounding?.wikipedia?.thumbnailUrl) images.push(grounding.wikipedia.thumbnailUrl);
+  if (grounding?.met?.imageUrl) images.push(grounding.met.imageUrl);
+
+  // Deduplicate final URLs.
+  const unique = [...new Set(images)];
+  console.log(`[slideshow] Found ${unique.length} unique images`);
+  return unique;
 }
 
 const stripJsonFences = (text) =>
@@ -298,8 +366,8 @@ Return strict JSON only, with these fields:
   "meaning": "What does this work *do* to you? Interpret its symbolism, composition, mood, and cultural weight the way a specialist who has spent years with art would — with conviction and nuance.",
   "lore": "Invent a vivid, clearly fictional myth or legend this artwork could have inspired. Make it feel ancient, poetic, and earned by the image itself.",
   "videoScript": "Write a 30-second cinematic voiceover — one flowing paragraph — in the voice of this art specialist. Evocative, rhythmic, made to be spoken aloud while slides display.",
-  "slideCaptions": ["Array of exactly 4 short, evocative one-sentence captions for a documentary slideshow: (1) introduce the piece, (2) the artist or historical context, (3) the emotional/symbolic core, (4) closing poetic thought."],
-  "slideSearchQueries": ["Array of exactly 4 Wikipedia article titles to fetch images for the slideshow. (1) the artwork title itself, (2) the artist's name, (3) a relevant art movement, city, or historical era, (4) the museum or collection where the work is held. Use real Wikipedia article titles that are likely to have images."],
+  "slideCaptions": ["Array of exactly 5 short, evocative one-sentence captions for a documentary slideshow: (1) introduce the piece, (2) the artist's life/world, (3) the historical era or movement, (4) the emotional/symbolic core, (5) closing poetic thought."],
+  "slideSearchQueries": ["Array of exactly 5 Wikipedia article titles to fetch images for the slideshow. Each MUST be a different topic — never repeat the same subject. Use real, well-known Wikipedia article titles that are likely to have images: (1) the artist's name (e.g. 'Leonardo da Vinci'), (2) the art movement or style (e.g. 'Impressionism'), (3) the city or country where it was created (e.g. 'Florence' or 'Paris'), (4) the museum where it is held (e.g. 'Louvre' or 'Metropolitan Museum of Art'), (5) a related famous artwork by the same artist or movement (e.g. 'The Last Supper')."],
   "groundingSummary": "One honest sentence: which sources matched and how confident you are."
 }
 `;
@@ -321,22 +389,11 @@ Return strict JSON only, with these fields:
     const analysis = parseGeminiAnalysis(raw);
     const verification = await verifyAnalysis(ai, analysis, grounding, communityMatch);
 
-    // Fetch contextual images from Wikipedia for the slideshow.
+    // Fetch contextual images from Wikipedia + Wikimedia Commons for the slideshow.
     const queries = Array.isArray(analysis.slideSearchQueries)
       ? analysis.slideSearchQueries
       : [];
-    const slideImages = await fetchWikipediaImages(queries);
-
-    // Also include grounding images as fallbacks.
-    if (grounding.wikipedia?.thumbnailUrl) {
-      slideImages.push(grounding.wikipedia.thumbnailUrl);
-    }
-    if (grounding.met?.imageUrl) {
-      slideImages.push(grounding.met.imageUrl);
-    }
-
-    // Deduplicate.
-    const uniqueSlideImages = [...new Set(slideImages)];
+    const uniqueSlideImages = await fetchSlideImages(queries, identification, grounding);
 
     res.json({
       success: true,
