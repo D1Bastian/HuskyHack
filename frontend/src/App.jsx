@@ -3,10 +3,11 @@ import { Link, NavLink, Route, Routes } from 'react-router-dom'
 import backgroundVideo from './assets/Art_Background.mp4'
 import './App.css'
 import VerificationBadge from './components/VerificationBadge.jsx'
-import { analyzeImage, generateMedia } from './lib/api.js'
+import { analyzeImage, generateMedia, listPosts } from './lib/api.js'
 import BlogList from './pages/BlogList.jsx'
 import BlogNew from './pages/BlogNew.jsx'
 import BlogPost from './pages/BlogPost.jsx'
+
 
 const emptyAnalysis = {
   artHistory: '',
@@ -124,6 +125,9 @@ function ArtStoryExperience() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [likedArtworks, setLikedArtworks] = useState(() => new Set())
+  const [blogPosts, setBlogPosts] = useState([])
+  const [blogLoading, setBlogLoading] = useState(false)
+  const [blogError, setBlogError] = useState('')
   const [creations, setCreations] = useState([])
   const [creationImage, setCreationImage] = useState('')
   const [creationTitle, setCreationTitle] = useState('')
@@ -133,6 +137,17 @@ function ArtStoryExperience() {
 
   useEffect(() => {
     window.scrollTo(0, 0)
+  }, [view])
+
+  useEffect(() => {
+    if (view === 'gallery') {
+      setBlogLoading(true)
+      setBlogError('')
+      listPosts()
+        .then((data) => setBlogPosts(data))
+        .catch((err) => setBlogError(err.message))
+        .finally(() => setBlogLoading(false))
+    }
   }, [view])
 
   const canGenerate = useMemo(
@@ -368,17 +383,12 @@ function ArtStoryExperience() {
               {label}
             </button>
           ))}
-          <NavLink to="/blog" className={({ isActive }) => (isActive ? 'active' : '')}>
-            Blog
-          </NavLink>
           <button
+            className={view === 'help' ? 'active' : ''}
             type="button"
-            onClick={() => {
-              setView('home')
-              setStatus('Upload, analyze, then generate narration and video from one artwork.')
-            }}
+            onClick={() => setView('help')}
           >
-            Help
+            FAQ
           </button>
         </nav>
       </header>
@@ -386,7 +396,6 @@ function ArtStoryExperience() {
       {view === 'home' && (
         <main className="home-page">
           <section className="hero-copy">
-            <p className="eyebrow">Gemini + Wikipedia + The Met + ElevenLabs + Runway</p>
             <h1>Welcome to ArtStory</h1>
             <p>Discover the stories, emotions, and history behind any artwork.</p>
           </section>
@@ -590,6 +599,37 @@ function ArtStoryExperience() {
             <p>Discover the world's creativity and explore stories from the ArtStory community.</p>
           </section>
 
+          <section className="blog-shell gallery-blog-section">
+            <div className="blog-header">
+              <div>
+                <h2>Community Blog</h2>
+                <p className="panel-subtitle">Artworks shared and explained by their creators.</p>
+              </div>
+              <Link to="/blog/new" className="primary-link">+ New post</Link>
+            </div>
+
+            {blogLoading && <p className="status">Loading posts…</p>}
+            {blogError && <p className="status">{blogError}</p>}
+
+            {!blogLoading && !blogError && blogPosts.length === 0 && (
+              <p className="status">No posts yet. Be the first to share an artwork.</p>
+            )}
+
+            <div className="post-grid">
+              {blogPosts.map((post) => (
+                <Link key={post.id} to={`/blog/${post.id}`} className="post-card">
+                  <div className="post-thumb">
+                    <img src={post.image_url} alt={post.title} />
+                  </div>
+                  <div className="post-meta">
+                    <h3>{post.title}</h3>
+                    <span className="post-author">by {post.author}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+
           <section className="gallery-grid">
             {galleryArtworks.map((artwork) => {
               const isLiked = likedArtworks.has(artwork.id)
@@ -688,6 +728,52 @@ function ArtStoryExperience() {
               ))}
             </section>
           )}
+        </main>
+      )}
+
+      {view === 'help' && (
+        <main className="help-page">
+          <section className="page-heading">
+            <h1>FAQ</h1>
+            <p>Everything you want to know about ArtStory and the stories behind art.</p>
+          </section>
+
+          <section className="faq-list">
+            <article className="faq-card">
+              <h2>What is ArtStory?</h2>
+              <p>ArtStory is an AI-powered platform that uncovers the hidden narratives behind artworks. Upload any painting, sculpture, or creative piece and receive a rich analysis covering its factual history, symbolic meaning, fictional lore, and even a cinematic narration — all generated in moments.</p>
+            </article>
+
+            <article className="faq-card">
+              <h2>How was ArtStory created?</h2>
+              <p>ArtStory was born at a hackathon where a team of developers, designers, and art enthusiasts came together to bridge technology and creativity. The app combines Google's Gemini AI for image recognition and storytelling, Wikipedia and The Metropolitan Museum of Art for factual grounding, ElevenLabs for lifelike narration, and Runway for cinematic video generation — all woven into a seamless full-stack experience.</p>
+            </article>
+
+            <article className="faq-card">
+              <h2>Why does knowing the story behind art matter?</h2>
+              <p>Every artwork carries layers of meaning — the artist's intent, the cultural moment it was made in, the emotions it evokes, and the conversations it sparks across generations. Understanding these stories transforms a passive glance into a profound connection. Art becomes more than a visual experience; it becomes a dialogue between you and the creator, separated by time but united by shared human expression.</p>
+            </article>
+
+            <article className="faq-card">
+              <h2>How do art pieces tell stories?</h2>
+              <p>Artists embed narrative through composition, color, symbolism, and technique. A single brushstroke can convey urgency; a palette choice can evoke melancholy or joy. Historical paintings often encode political commentary, religious allegory, or personal memoir. Even abstract works tell stories through rhythm, texture, and the physical act of creation. ArtStory helps decode these visual languages so you can experience the full depth of what the artist intended — and discover meanings that even the artist may not have planned.</p>
+            </article>
+
+            <article className="faq-card">
+              <h2>What kinds of artwork can I analyze?</h2>
+              <p>Anything visual — famous masterpieces, museum photographs, street art, personal sketches, digital illustrations, sculptures, and more. Whether it's the Mona Lisa or a drawing from your sketchbook, ArtStory will find the story within it.</p>
+            </article>
+
+            <article className="faq-card">
+              <h2>Is the information accurate?</h2>
+              <p>ArtStory grounds its factual analysis in trusted public sources like Wikipedia and The Metropolitan Museum of Art's open-access collection. Each section of the analysis is labeled with a verification badge so you always know what's sourced from established records, what's interpretive, and what's creative fiction. Transparency is at the heart of everything we do.</p>
+            </article>
+
+            <article className="faq-card">
+              <h2>What is the "Fictional Lore" section?</h2>
+              <p>Fictional Lore is a creative, imaginative retelling inspired by the artwork — clearly labeled as fiction. It's designed to spark your imagination and show how art can inspire entirely new stories. Think of it as the legend that might surround a painting if it existed in a fantasy world.</p>
+            </article>
+          </section>
         </main>
       )}
     </div>

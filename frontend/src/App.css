@@ -111,7 +111,8 @@ button {
 .home-page,
 .analysis-page,
 .gallery-page,
-.creations-page {
+.creations-page,
+.help-page {
   width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
   padding: 128px 0 64px;
@@ -121,6 +122,15 @@ button {
   min-height: 100svh;
   display: grid;
   align-content: start;
+  padding-top: 180px;
+}
+
+.creations-page {
+  padding-top: 180px;
+}
+
+.gallery-page {
+  padding-top: 180px;
 }
 
 .hero-copy {
@@ -752,6 +762,10 @@ button:disabled {
   padding: 30px;
 }
 
+.gallery-blog-section {
+  margin-bottom: 48px;
+}
+
 .blog-header {
   display: flex;
   justify-content: space-between;
@@ -997,4 +1011,44 @@ button:disabled {
   .selected-actions button {
     width: 100%;
   }
+}
+
+.help-page {
+  padding-top: 180px;
+}
+
+.faq-list {
+  display: grid;
+  gap: 20px;
+  max-width: 840px;
+  margin: 0 auto;
+}
+
+.faq-card {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 30px 34px;
+  transition: transform 200ms ease;
+}
+
+.faq-card:hover {
+  transform: translateY(-2px);
+}
+
+.faq-card h2 {
+  font-family: var(--body);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+
+.faq-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.78;
+  font-size: 0.98rem;
 }
