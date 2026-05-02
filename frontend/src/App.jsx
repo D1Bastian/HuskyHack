@@ -524,11 +524,23 @@ function ArtStoryExperience() {
 
           <section className="analysis-layout">
             <aside className="artwork-panel">
-              {previewUrl ? <img alt="Analyzed artwork" src={previewUrl} /> : <div className="empty-preview" />}
+              <div className={`artwork-image-wrap${isAnalyzing ? ' artwork-loading' : ''}`}>
+                {previewUrl ? <img alt="Analyzed artwork" src={previewUrl} /> : <div className="empty-preview" />}
+                {isAnalyzing && <div className="artwork-loading-overlay"><div className="artwork-spinner" /></div>}
+              </div>
               <div className="artwork-meta">
-                <p className="eyebrow">{artworkMode === 'famous' ? 'Famous Artwork' : 'Personal Creation'}</p>
-                <h1>{analysis.groundingSummary ? 'Artwork Analysis' : 'Awaiting Analysis'}</h1>
-                <p>{status}</p>
+                {isAnalyzing ? (
+                  <div className="skeleton-block" style={{marginBottom: '12px'}}>
+                    <span style={{width: '70%', height: '22px'}} />
+                    <span style={{width: '90%'}} />
+                    <span style={{width: '55%'}} />
+                  </div>
+                ) : (
+                  <>
+                    <h1>{analysis.groundingSummary ? 'Artwork Analysis' : 'Awaiting Analysis'}</h1>
+                    <p>{status}</p>
+                  </>
+                )}
                 {sources.length > 0 && (
                   <div className="source-list">
                     {sources.map((source) => (
@@ -563,29 +575,25 @@ function ArtStoryExperience() {
                   <h2>Factual History</h2>
                   <VerificationBadge verdict={verification?.artHistory} />
                 </div>
-                <p>{analysis.artHistory || 'The factual analysis will appear here once Gemini and the public sources respond.'}</p>
+                {isAnalyzing ? <div className="skeleton-block"><span /><span /><span style={{width:'72%'}} /></div> : <p>{analysis.artHistory || 'The factual analysis will appear here once Gemini and the public sources respond.'}</p>}
               </article>
               <article>
                 <div className="article-head">
                   <h2>Interpretation</h2>
                   <VerificationBadge verdict={verification?.meaning} />
                 </div>
-                <p>{analysis.meaning || 'Symbolism, mood, composition, and plausible readings will appear here.'}</p>
+                {isAnalyzing ? <div className="skeleton-block"><span /><span /><span style={{width:'60%'}} /></div> : <p>{analysis.meaning || 'Symbolism, mood, composition, and plausible readings will appear here.'}</p>}
               </article>
               <article>
                 <div className="article-head">
                   <h2>Fictional Lore</h2>
                   <span className="verify-badge verify-fiction">Fiction</span>
                 </div>
-                <p>{analysis.lore || 'The fictional lore section will stay clearly labeled as fiction.'}</p>
+                {isAnalyzing ? <div className="skeleton-block"><span /><span /><span style={{width:'80%'}} /></div> : <p>{analysis.lore || 'The fictional lore section will stay clearly labeled as fiction.'}</p>}
               </article>
               <article>
                 <h2>Narration Script</h2>
-                <p>{analysis.videoScript || 'A voiceover-ready script will appear here after analysis.'}</p>
-              </article>
-              <article>
-                <h2>Runway Prompt</h2>
-                <p>{analysis.runwayPrompt || 'The cinematic prompt for text-to-video generation will appear here.'}</p>
+                {isAnalyzing ? <div className="skeleton-block"><span /><span /><span style={{width:'55%'}} /></div> : <p>{analysis.videoScript || 'A voiceover-ready script will appear here after analysis.'}</p>}
               </article>
 
               <div className="generate-panel">
