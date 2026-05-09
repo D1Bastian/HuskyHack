@@ -31,3 +31,4 @@ generated
 
 backend/.env
 AGENTS.md
+.vercel
